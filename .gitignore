@@ -1,0 +1,32 @@
+# Virtual environment
+research/
+venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Datasets and archives
+**/data/
+*.tar
+*.zip
+*.tar.gz
+
+# Cache directories and serialized features
+**/cache/
+*.pkl
+*.npy
+*.pt
+*.pth
+
+# Evaluation outputs and logs
+*.csv
+*.log
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
