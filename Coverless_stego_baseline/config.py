@@ -5,8 +5,8 @@ class Config:
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     
     # Steganography Parameters (Section III & IV-C)
-    N_BITS = 6                 # Secret segment length n (default 6 -> 64 groups; also test 3, 4, 5)
-    M_OBJECTS = 4              # Top-M largest objects per image (default 4; also test 3, 5, 6)
+    N_BITS = 6                 # Secret segment length n
+    M_OBJECTS = 4              # Top-M largest objects per image
     CONF_THRESHOLD = 0.90      # 90% confidence threshold for Faster R-CNN (Section III-A2)
     
     # Clustering Parameters (Table V)
