@@ -1,0 +1,5 @@
+# Paper Tables VII and XI
+dataset: voc2012
+n: 3
+M: 4
+k: 256
