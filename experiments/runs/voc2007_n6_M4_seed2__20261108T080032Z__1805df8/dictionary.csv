@@ -1,0 +1,75 @@
+object_label,group,binary_sequence,images_with_label
+airplane,0,000000,407
+apple,1,000001,2
+backpack,2,000010,48
+banana,3,000011,4
+baseball bat,4,000100,18
+baseball glove,4,000100,2
+bear,4,000100,1
+bed,5,000101,58
+bench,6,000110,42
+bicycle,7,000111,410
+bird,8,001000,535
+boat,9,001001,280
+book,10,001010,168
+bottle,11,001011,311
+bowl,12,001100,105
+broccoli,13,001101,2
+bus,14,001110,302
+cake,15,001111,13
+car,16,010000,1159
+carrot,17,010001,1
+cat,18,010010,570
+cell phone,19,010011,32
+chair,20,010100,794
+clock,21,010101,50
+couch,22,010110,308
+cow,23,010111,239
+cup,24,011000,169
+dining table,25,011001,389
+dog,26,011010,674
+donut,27,011011,8
+elephant,27,011011,3
+fire hydrant,27,011011,5
+fork,28,011100,13
+frisbee,29,011101,10
+giraffe,29,011101,1
+handbag,30,011110,39
+horse,31,011111,517
+keyboard,32,100000,113
+kite,33,100001,5
+knife,33,100001,9
+laptop,34,100010,75
+microwave,35,100011,13
+motorcycle,36,100100,442
+mouse,37,100101,52
+orange,38,100110,10
+oven,39,100111,19
+parking meter,40,101000,7
+person,41,101001,4239
+pizza,42,101010,6
+potted plant,43,101011,425
+refrigerator,44,101100,31
+remote,45,101101,46
+sandwich,46,101110,5
+scissors,46,101110,5
+sheep,47,101111,176
+sink,48,110000,11
+skateboard,49,110001,1
+skis,49,110001,3
+spoon,49,110001,8
+sports ball,50,110010,20
+stop sign,51,110011,5
+suitcase,52,110100,13
+surfboard,53,110101,16
+teddy bear,54,110110,41
+tie,55,110111,30
+toilet,56,111000,1
+toothbrush,56,111000,2
+traffic light,57,111001,43
+train,58,111010,456
+truck,59,111011,177
+tv,60,111100,408
+umbrella,61,111101,23
+vase,62,111110,118
+wine glass,63,111111,98

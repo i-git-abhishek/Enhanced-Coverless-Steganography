@@ -1,0 +1,29 @@
+{
+  "git": {
+    "commit": "1805df8",
+    "dirty": false,
+    "changes": []
+  },
+  "packages": {
+    "python": "3.13.16",
+    "numpy": "2.1.3",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.6.1",
+    "scikit-image": "0.25.2",
+    "opencv-python-headless": "4.14.0.94",
+    "opencv-python": "4.14.0.94",
+    "torch": "2.11.0+cu130",
+    "torchvision": "0.26.0+cu130",
+    "PyYAML": "6.0.3"
+  },
+  "gpu": "Tesla T4\nTesla T4",
+  "extraction": {
+    "dataset": "voc2007",
+    "images": 9963,
+    "detector": "fasterrcnn_resnet50_fpn/COCO_V1",
+    "features": "resnet101/IMAGENET1K_V1/avgpool/resize224",
+    "box_score_threshold": 0.05,
+    "torch": "2.11.0+cu130",
+    "torchvision": "0.26.0+cu130"
+  }
+}

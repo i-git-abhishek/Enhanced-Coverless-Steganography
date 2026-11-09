@@ -1,0 +1,25 @@
+{
+  "dataset": "voc2007",
+  "n": 6,
+  "M": 4,
+  "conf_threshold": 0.9,
+  "k": 256,
+  "cluster_algorithm": "kmeans",
+  "cluster_max_iter": 100,
+  "cluster_seed": 0,
+  "hash_threshold": 0.5,
+  "ssim_mode": "global",
+  "ssim_size": 256,
+  "capacity_bytes": [
+    10,
+    100,
+    1024
+  ],
+  "capacity_trials": 5,
+  "robustness_trials": 25,
+  "robustness_segments": 16,
+  "gamma_exponent": 0.8,
+  "seed": 1,
+  "bootstrap_samples": 1000,
+  "expected_images": 0
+}
