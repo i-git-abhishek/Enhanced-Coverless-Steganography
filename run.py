@@ -91,6 +91,15 @@ def command_sweep(args) -> int:
     return 0
 
 
+def command_ordering(args) -> int:
+    from stego.ordering_experiment import run_ordering
+
+    config = load_config(args.config, args.set)
+    lambdas = [float(value) for value in args.lambdas]
+    run_ordering(config, paths_from(args), lambdas, args.trials, args.label, args.allow_dirty)
+    return 0
+
+
 def command_dashboard(args) -> int:
     runs = Path(args.runs_dir)
     output = build_dashboard(runs, runs.parent / "RESULTS_DASHBOARD.md")
@@ -101,7 +110,14 @@ def command_dashboard(args) -> int:
 def command_bundle(args) -> int:
     runs = Path(args.runs_dir)
     experiments = runs.parent
-    build_dashboard(runs, experiments / "RESULTS_DASHBOARD.md")
+    # A session with no baseline runs must not replace the dashboard with an empty one.
+    if any(runs.glob("*/summary.json")):
+        build_dashboard(runs, experiments / "RESULTS_DASHBOARD.md")
+    ordering_runs = experiments / "ordering_runs"
+    if ordering_runs.is_dir():
+        from stego.ordering_experiment import build_ordering_dashboard
+
+        build_ordering_dashboard(ordering_runs, experiments / "ORDERING_DASHBOARD.md")
     output = Path(args.output)
     with tarfile.open(output, "w:gz") as archive:
         archive.add(experiments, arcname="experiments")
@@ -179,6 +195,15 @@ def main() -> int:
     sub.add_argument("--label", default="")
     sub.add_argument("--allow-dirty", action="store_true")
     sub.set_defaults(func=command_sweep)
+
+    sub = commands.add_parser("ordering", help="Phase 2: compare ordering schemes on the cached detections (CPU)")
+    add_common(sub)
+    sub.add_argument("--lambdas", nargs="+", default=["0", "1", "2", "4", "8", "16", "inf"],
+                     help="Image prices in bits for scheme C. inf means fewest images first")
+    sub.add_argument("--trials", type=int, default=20, help="Messages per message length")
+    sub.add_argument("--label", default="")
+    sub.add_argument("--allow-dirty", action="store_true")
+    sub.set_defaults(func=command_ordering)
 
     sub = commands.add_parser("dashboard", help="Rebuild experiments/RESULTS_DASHBOARD.md")
     sub.add_argument("--runs-dir", default=str(REPO_ROOT / "experiments" / "runs"))

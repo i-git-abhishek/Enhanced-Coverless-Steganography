@@ -453,3 +453,48 @@ Run in this order. Extract once per dataset, then each config is CPU only:
     python run.py baseline --config configs/paper/01_voc2007_n6_M4.yaml --label paper01
 
 Configs 4-9 use the extraction of config 3, because n and M do not change the cache key.
+
+## 16. Phase 2: the ordering experiment (less or no order data)
+
+This compares the paper's order array with fixed reading orders. It needs only the saved
+extraction cache and the dataset (for the image list). It does not need a GPU or the clusters.
+
+| Scheme | Order data sent per image | What the receiver does |
+|---|---|---|
+| paper-greedy | the paper's order array (6 bits at M=4) | exactly the baseline: same messages, same images as `capacity.csv` |
+| paper-dp | the same order array | same, but the images are chosen by dynamic programming |
+| A | nothing | reads every top-M object left to right (by box centre) |
+| A-area | nothing | reads every top-M object largest first; shows the rule itself does not matter |
+| B | an M-bit mask | reads the marked objects, left to right |
+| C (lambda=x) | 1-bit flag, plus the order array only when the flag is 1 | flag 0 = as A, flag 1 = as the paper |
+
+A, A-area, B and C put the message length (16 bits) in front of the message, so the last
+image may hold extra objects. These 16 bits are counted as extra data. The cluster ID is
+unchanged in Phase 2; the results show net bits both with it and without it (Phase 3 removes it).
+
+lambda is the price of one image in bits. lambda=0 means "send as little order data as
+possible"; lambda=inf means "use as few images as possible". The sweep traces the trade-off.
+
+Run one setting:
+
+    python run.py ordering --config configs/voc2012.yaml
+    python run.py ordering --config configs/voc2012.yaml --set n=3 --trials 20 --lambdas 0 1 2 4 8 16 inf
+
+Results go to `experiments/ordering_runs/<tag>__ordering__<time>__<commit>/`:
+
+| File | Contents |
+|---|---|
+| `ordering_messages.csv` | one row per message and scheme: images, order bits, header bits, round trip |
+| `ordering_summary.csv` | means per message size and scheme, including net bits per image |
+| `checks.json` | must all pass (see below) |
+| `summary.json` | the bound log2(usable images), and the groups that have no single-object image |
+
+`experiments/ORDERING_DASHBOARD.md` shows the 1 KB results of every ordering run.
+
+Checks: every hidden message decodes exactly; A and A-area send 0 order bits; paper-dp never
+needs more images than paper-greedy; C at lambda=inf never needs more images than A or B; a
+higher lambda never uses more images.
+
+If A shows "Hidden %" below 100, that is a result, not a bug: some group has no image whose
+only object maps to it, so some messages cannot be sent with zero order data. The log line
+"Groups with no single-object image" says how many. Scheme C covers those cases with its flag.
