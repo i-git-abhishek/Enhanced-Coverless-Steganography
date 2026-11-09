@@ -1,0 +1,7 @@
+# Paper Tables XVI and XVII (M sweep)
+# minibatch is a deliberate deviation: exact k-means at this size may not finish in a Kaggle session.
+dataset: coco2014
+n: 6
+M: 3
+k: 1024
+cluster_algorithm: minibatch

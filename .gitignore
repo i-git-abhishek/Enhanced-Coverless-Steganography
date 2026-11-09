@@ -1,32 +1,32 @@
-# Virtual environment
+# Virtual environments
 research/
 venv/
 env/
+.venv/
 
-# Python bytecode and caches
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
 .pytest_cache/
 
-# Datasets and archives
-**/data/
+# Data and caches are large and can be rebuilt
+data/
+cache/
+*.pkl
+*.pth
+*.pt
 *.tar
 *.zip
 *.tar.gz
+!experiments/runs/**/source.tar.gz
 
-# Cache directories and serialized features
-**/cache/
-*.pkl
-*.npy
-*.pt
-*.pth
-
-# Evaluation outputs and logs
-*.csv
-*.log
-
-# Editor / OS files
+# Editor and OS files
 .vscode/
 .idea/
 .DS_Store
+.ipynb_checkpoints/
+
+# Old local outputs moved with the legacy code
+legacy/**/*.csv
+legacy/**/*.log
+legacy/**/*.npy

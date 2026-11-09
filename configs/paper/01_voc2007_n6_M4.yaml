@@ -1,0 +1,5 @@
+# Paper Tables VI and X
+dataset: voc2007
+n: 6
+M: 4
+k: 256

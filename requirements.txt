@@ -1,8 +1,9 @@
-torch
-torchvision
-scikit-learn
-scikit-image
-opencv-python-headless
-pandas
-numpy
-tqdm
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.3
+scikit-image>=0.21
+opencv-python-headless>=4.8
+PyYAML>=6.0
+Pillow>=9.5
+pytest>=7.4
+# torch and torchvision are preinstalled on Kaggle and are needed only for extract and verify-detections.
