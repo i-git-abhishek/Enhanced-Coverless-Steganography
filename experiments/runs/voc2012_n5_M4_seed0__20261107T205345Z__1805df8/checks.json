@@ -1,0 +1,38 @@
+{
+  "dictionary_complete": {
+    "passed": true,
+    "detail": "77 labels in 32 groups"
+  },
+  "dictionary_alphabetical": {
+    "passed": true,
+    "detail": "groups rise in alphabetical label order"
+  },
+  "index_complete": {
+    "passed": true,
+    "detail": "15/15 messages fully hidden"
+  },
+  "bytes_round_trip": {
+    "passed": true,
+    "detail": "15/15 exact"
+  },
+  "bytes_round_trip_with_retrieval": {
+    "passed": true,
+    "detail": "3/3 exact"
+  },
+  "all_attacks_present": {
+    "passed": true,
+    "detail": "22 attacks plus no-attack control"
+  },
+  "no_attack_acc_100": {
+    "passed": true,
+    "detail": "ACC 100.0%"
+  },
+  "no_attack_retrieval_100": {
+    "passed": true,
+    "detail": "retrieval 100.0%"
+  },
+  "image_count": {
+    "passed": true,
+    "detail": "11540 images used, 11540 expected"
+  }
+}

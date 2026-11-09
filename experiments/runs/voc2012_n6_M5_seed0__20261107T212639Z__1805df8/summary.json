@@ -1,0 +1,62 @@
+{
+  "config": {
+    "dataset": "voc2012",
+    "n": 6,
+    "M": 5,
+    "conf_threshold": 0.9,
+    "k": 256,
+    "cluster_algorithm": "kmeans",
+    "cluster_max_iter": 100,
+    "cluster_seed": 0,
+    "hash_threshold": 0.5,
+    "ssim_mode": "global",
+    "ssim_size": 256,
+    "capacity_bytes": [
+      10,
+      100,
+      1024
+    ],
+    "capacity_trials": 5,
+    "robustness_trials": 25,
+    "robustness_segments": 16,
+    "gamma_exponent": 0.8,
+    "seed": 0,
+    "bootstrap_samples": 1000,
+    "expected_images": 0
+  },
+  "official": true,
+  "checks_passed": true,
+  "git_commit": "1805df8",
+  "paper_tables": null,
+  "means": {
+    "mean_acc_22_attacks": 81.81,
+    "mean_acc_geometric": 69.35,
+    "mean_acc_non_geometric": 99.81,
+    "no_attack_acc": 100.0
+  },
+  "capacity_mean_images": {
+    "10": 10.6,
+    "100": 99.2,
+    "1024": 1012.0
+  },
+  "capacity_paper_images": {},
+  "capacity_bits_per_image": {
+    "10": 7.76,
+    "100": 8.07,
+    "1024": 8.1
+  },
+  "capacity_utilisation_percent": {
+    "10": 37.38,
+    "100": 38.6,
+    "1024": 39.44
+  },
+  "capacity_paper_utilisation_percent": {},
+  "aux_bits_fixed": 23.0,
+  "aux_bits_tight": 16.34,
+  "images_total": 11540,
+  "images_with_objects": 10388,
+  "labels_detected": 77,
+  "cluster_size_mean": 45.08,
+  "cluster_size_max": 830,
+  "seconds": 937.3
+}

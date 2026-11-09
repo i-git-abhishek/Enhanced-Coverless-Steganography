@@ -1,0 +1,78 @@
+object_label,group,binary_sequence,images_with_label
+airplane,0,0000,625
+apple,0,0000,5
+backpack,1,0001,44
+banana,1,0001,9
+baseball bat,1,0001,2
+baseball glove,1,0001,7
+bear,1,0001,11
+bed,1,0001,69
+bench,1,0001,66
+bicycle,1,0001,446
+bird,2,0010,654
+boat,3,0011,376
+book,3,0011,160
+bottle,4,0100,411
+bowl,4,0100,138
+broccoli,4,0100,3
+bus,4,0100,373
+cake,5,0101,16
+car,5,0101,856
+carrot,5,0101,6
+cat,6,0110,877
+cell phone,6,0110,38
+chair,7,0111,799
+clock,7,0111,53
+couch,7,0111,242
+cow,8,1000,268
+cup,8,1000,208
+dining table,8,1000,401
+dog,9,1001,1006
+donut,10,1010,5
+elephant,10,1010,2
+fire hydrant,10,1010,9
+fork,10,1010,15
+frisbee,10,1010,12
+handbag,10,1010,45
+horse,10,1010,432
+hot dog,10,1010,1
+keyboard,10,1010,113
+kite,10,1010,10
+knife,11,1011,13
+laptop,11,1011,89
+microwave,11,1011,21
+motorcycle,11,1011,471
+mouse,11,1011,37
+orange,11,1011,7
+oven,11,1011,13
+parking meter,11,1011,1
+person,12,1100,4355
+pizza,13,1101,7
+potted plant,13,1101,398
+refrigerator,13,1101,53
+remote,13,1101,50
+sandwich,13,1101,4
+scissors,13,1101,2
+sheep,13,1101,284
+sink,14,1110,13
+skateboard,14,1110,5
+skis,14,1110,2
+snowboard,14,1110,1
+spoon,14,1110,21
+sports ball,14,1110,29
+stop sign,14,1110,14
+suitcase,14,1110,24
+surfboard,14,1110,9
+teddy bear,14,1110,33
+tennis racket,14,1110,5
+tie,14,1110,49
+toilet,14,1110,9
+toothbrush,14,1110,2
+traffic light,14,1110,68
+train,14,1110,475
+truck,15,1111,161
+tv,15,1111,423
+umbrella,15,1111,20
+vase,15,1111,106
+wine glass,15,1111,70
+zebra,15,1111,2

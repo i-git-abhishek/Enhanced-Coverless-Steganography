@@ -1,0 +1,78 @@
+object_label,group,binary_sequence,images_with_label
+airplane,0,000,625
+apple,0,000,5
+backpack,0,000,44
+banana,0,000,9
+baseball bat,0,000,2
+baseball glove,0,000,7
+bear,0,000,11
+bed,0,000,69
+bench,0,000,66
+bicycle,0,000,446
+bird,0,000,654
+boat,1,001,376
+book,1,001,160
+bottle,1,001,411
+bowl,1,001,138
+broccoli,1,001,3
+bus,1,001,373
+cake,1,001,16
+car,2,010,856
+carrot,2,010,6
+cat,2,010,877
+cell phone,3,011,38
+chair,3,011,799
+clock,3,011,53
+couch,3,011,242
+cow,3,011,268
+cup,3,011,208
+dining table,4,100,401
+dog,4,100,1006
+donut,5,101,5
+elephant,5,101,2
+fire hydrant,5,101,9
+fork,5,101,15
+frisbee,5,101,12
+handbag,5,101,45
+horse,5,101,432
+hot dog,5,101,1
+keyboard,5,101,113
+kite,5,101,10
+knife,5,101,13
+laptop,5,101,89
+microwave,5,101,21
+motorcycle,5,101,471
+mouse,5,101,37
+orange,5,101,7
+oven,5,101,13
+parking meter,5,101,1
+person,6,110,4355
+pizza,7,111,7
+potted plant,7,111,398
+refrigerator,7,111,53
+remote,7,111,50
+sandwich,7,111,4
+scissors,7,111,2
+sheep,7,111,284
+sink,7,111,13
+skateboard,7,111,5
+skis,7,111,2
+snowboard,7,111,1
+spoon,7,111,21
+sports ball,7,111,29
+stop sign,7,111,14
+suitcase,7,111,24
+surfboard,7,111,9
+teddy bear,7,111,33
+tennis racket,7,111,5
+tie,7,111,49
+toilet,7,111,9
+toothbrush,7,111,2
+traffic light,7,111,68
+train,7,111,475
+truck,7,111,161
+tv,7,111,423
+umbrella,7,111,20
+vase,7,111,106
+wine glass,7,111,70
+zebra,7,111,2

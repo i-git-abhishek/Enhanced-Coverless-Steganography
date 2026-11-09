@@ -1,0 +1,24 @@
+attack,acc_percent,ci95_low,ci95_high,retrieval_percent,paper_acc_percent,difference_from_paper,segments
+No attack,100.0,100.0,100.0,100.0,,,400
+Center Cropping 5%,99.0,98.0,99.75,98.69,,,400
+Center Cropping 10%,98.25,97.25,99.25,97.05,,,400
+Center Cropping 20%,90.5,87.75,93.0,88.52,,,400
+Edge Cropping 5%,99.25,98.5,99.76,98.69,,,400
+Edge Cropping 10%,98.75,97.5,99.75,98.03,,,400
+Edge Cropping 20%,98.25,96.75,99.5,97.05,,,400
+Rotation 10°,90.5,86.5,94.0,87.21,,,400
+Rotation 30°,18.75,15.25,22.26,8.85,,,400
+Rotation 50°,12.5,8.5,17.0,3.28,,,400
+"Translation (36, 20)",47.25,41.75,53.25,35.41,,,400
+"Translation (40, 25)",34.25,29.75,39.01,21.64,,,400
+"Translation (80, 50)",13.25,9.75,16.51,3.61,,,400
+Scaling,100.0,100.0,100.0,100.0,,,400
+Gauss Noise,100.0,100.0,100.0,100.0,,,400
+Salt & Pepper Noise,100.0,100.0,100.0,100.0,,,400
+Speckle Noise,100.0,100.0,100.0,100.0,,,400
+Median Filter,100.0,100.0,100.0,100.0,,,400
+Mean Filter,100.0,100.0,100.0,100.0,,,400
+Gauss Filter,100.0,100.0,100.0,100.0,,,400
+JPEG Compression,100.0,100.0,100.0,100.0,,,400
+Histogram Equalization,99.0,97.75,100.0,98.69,,,400
+Gamma Correction,100.0,100.0,100.0,100.0,,,400
