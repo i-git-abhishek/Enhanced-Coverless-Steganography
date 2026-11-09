@@ -256,7 +256,7 @@ n can only go as high as the labels allow: there must be at least 2^n detected l
 
 **VOC 2012 (11,540 images):**
 
-1. Add a VOC 2012 dataset, such as `huanghanchina/pascal-voc-2012` ([page](https://www.kaggle.com/datasets/huanghanchina/pascal-voc-2012)). It must include `VOC2012/ImageSets/Main/trainval.txt`.
+1. Add a VOC 2012 dataset, such as `gopalbhattrai/pascal-voc-2012-dataset` ([page](https://www.kaggle.com/datasets/gopalbhattrai/pascal-voc-2012-dataset)). It must include `ImageSets/Main/trainval.txt` in a folder with "VOC2012" in its name. Having the test folder too is fine, because it isn't used.
 2. Set `CONFIG = "configs/voc2012.yaml"`.
 3. Run, then save the results as in section 6.
 
@@ -397,6 +397,7 @@ Report this table in your methods section. Where a setting exists, you can test 
 | --- | --- |
 | `Clone failed` | Check `REPO` and `BRANCH`, turn Internet on, and confirm the branch is pushed. For a private repo, complete step 4 of section 4 |
 | `Found N images ... expected 9963` | The dataset is incomplete, often trainval only. Add a complete one. If you see more than expected, check for extra attached data |
+| `Could not find ImageSets/Main/trainval.txt` | The attached dataset lacks the official list of 11,540 images, or its folder name doesn't include "VOC2012". Use another VOC 2012 dataset |
 | `[extract] WARNING: no GPU found` | Set the accelerator to GPU T4 x2, then run again |
 | Model weights fail to download | Turn Internet on |
 | `No finished extraction found` | Run `extract`, or keep `RUN_EXTRACTION = True`. A cache only applies to exactly the same image list |
@@ -433,3 +434,22 @@ Every command is run from the repo's main folder.
 | `python run.py bundle --output results_bundle.tar.gz` | Pack results for download |
 
 Add `--data-root FOLDER` if the images are not in `/kaggle/input` (Kaggle) or `data/` (your computer).
+
+## 15. The nine paper configurations (configs/paper/)
+
+Each file matches one table pair in the paper and has a stored reference, so the run folder shows your numbers beside the paper's.
+
+| # | Config | Paper tables | Extraction needed |
+|---|---|---|---|
+| 1 | 01_voc2007_n6_M4 | VI, X | VOC2007 |
+| 2 | 02_voc2012_n6_M4 | VII, XI | VOC2012 |
+| 3 | 03_coco2014_n6_M4 | VIII, XII | COCO2014 |
+| 4-6 | 04-06_coco2014_n3/4/5_M4 | XIII, XV | reuse COCO2014 (no new GPU pass) |
+| 7-9 | 07-09_coco2014_n6_M3/5/6 | XVI, XVII | reuse COCO2014 (no new GPU pass) |
+
+Run in this order. Extract once per dataset, then each config is CPU only:
+
+    python run.py extract --config configs/paper/01_voc2007_n6_M4.yaml
+    python run.py baseline --config configs/paper/01_voc2007_n6_M4.yaml --label paper01
+
+Configs 4-9 use the extraction of config 3, because n and M do not change the cache key.

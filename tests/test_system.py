@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from stego import attacks, cache
+from stego import attacks, cache, tracking
 from stego.config import ConfigError, build_config, load_config
 from stego.data import DataError, discover_images
 from stego.evaluate import auxiliary_bits_per_image, bootstrap_interval
@@ -241,7 +241,8 @@ def test_full_pipeline_for_paper_sweeps(synthetic, n, m):
     checks = json.loads((folder / "checks.json").read_text())
     assert all(item["passed"] for item in checks.values()), checks
     summary = json.loads((folder / "summary.json").read_text())
-    assert summary["official"] is False  # the test uses --allow-dirty
+    # official means a clean tree and all checks passed, so it depends on where the tests run
+    assert summary["official"] == (not tracking.git_state()["dirty"])
     assert summary["means"]["no_attack_acc"] == 100.0
     for name in ("capacity.csv", "attacks.csv", "segments.csv.gz", "dictionary.csv", "source.tar.gz", "environment.json"):
         assert (folder / name).is_file()

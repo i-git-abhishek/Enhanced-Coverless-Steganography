@@ -1,4 +1,4 @@
-# Paper Tables VII and XI
+# VOC2012 sweep. The paper has no VOC2012 n or M sweep, so there are no paper values to compare with.
 dataset: voc2012
 n: 4
 M: 4
