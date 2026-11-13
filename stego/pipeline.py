@@ -18,7 +18,7 @@ from .evaluate import (
     summarise_robustness,
 )
 from .mapping import ImageIndex, build_index, label_image_counts, run_clustering, segment_to_bits
-from .recovery import Retriever
+from .recovery import make_retriever
 
 
 @dataclass
@@ -107,6 +107,51 @@ def evaluate_checks(config, index, label_counts, capacity, capacity_checks, summ
     return results
 
 
+def prepare_phase3(config, ids, image_paths, index: ImageIndex, paths: Paths, log=print) -> dict:
+    """Loads descriptors and, if asked, runs the retrievability check and limits the sender to usable images."""
+    searched = int(index.usable_images)
+    if config.uses_clusters:
+        return {"images_searched": searched, "bound_bits_per_image": round(float(np.log2(searched)), 3)}
+    from .descriptors import DescriptorModel, load_descriptors
+    from .retrievability import run_check, sendable_images, usable_mask, usable_report
+
+    descriptors = load_descriptors(ids, config.dataset, config.descriptor, paths.cache_dir, paths.read_dirs)
+    model = DescriptorModel(config.descriptor, weights_dir=Path(paths.cache_dir) / "weights")
+    sendable = sendable_images(index)
+    search = np.flatnonzero(sendable)
+    info = {"descriptors": descriptors, "model": model}
+    if config.usable_threshold > 0:
+        hits = run_check(config, ids, image_paths, descriptors, model, sendable, paths.cache_dir, paths.read_dirs, log)
+        usable = usable_mask(hits, sendable, config.usable_threshold)
+        # The sender cannot choose an image that failed the check ...
+        index.counts[~usable] = 0
+        # ... and the receiver, who can run the same check, only searches the usable ones.
+        search = np.flatnonzero(usable)
+        names = list(TABLE_IX_ORDER)
+        found = hits[sendable].mean(axis=0) * 100.0
+        info["retrievability"] = {
+            "usable_threshold": config.usable_threshold,
+            "sendable_images": int(sendable.sum()),
+            "usable_images": int(usable.sum()),
+            "found_percent_per_attack": {name: round(float(v), 2) for name, v in zip(names, found)},
+            "by_threshold": usable_report(hits, sendable),
+        }
+        groups_left = int((index.counts.sum(axis=0) > 0).sum())
+        info["retrievability"]["groups_with_a_usable_image"] = groups_left
+        log(f"[retrievability] {int(usable.sum())} of {int(sendable.sum())} images usable at threshold "
+            f"{config.usable_threshold:g}; {groups_left} of {index.groups} groups still have an image")
+        if groups_left < index.groups:
+            raise RuntimeError(
+                f"At usable_threshold={config.usable_threshold:g} only {int(usable.sum())} images pass the "
+                f"retrievability check, and {index.groups - groups_left} of the {index.groups} groups have no "
+                "usable image left, so some messages cannot be hidden. Use a lower usable_threshold or a smaller n."
+            )
+    info["search"] = search
+    info["images_searched"] = int(search.size)
+    info["bound_bits_per_image"] = round(float(np.log2(search.size)), 3) if search.size else 0.0
+    return info
+
+
 def ordered_attacks() -> list[str]:
     """Table IX order, which is also the order attacks are run in."""
     return list(TABLE_IX_ORDER)
@@ -125,14 +170,20 @@ def run_baseline(config, paths: Paths, label: str = "", allow_dirty: bool = Fals
     log(f"[run] {config.tag}: finding images in {paths.data_root}")
     ids, image_paths = discover_images(config, paths.data_root)
     extraction = cache.load_extraction(ids, config.dataset, paths.cache_dir, paths.read_dirs)
-    clusters = load_clusters_or_build(config, extraction, paths, log)
+    if config.uses_clusters:
+        clusters = load_clusters_or_build(config, extraction, paths, log)
+    else:
+        # Phase 3: the receiver searches everything, so no cluster ID is sent.
+        clusters = np.zeros(len(ids), dtype=np.int32)
     counts = label_image_counts(extraction.objects, config.conf_threshold, config.M)
     index = build_index(ids, extraction.objects, clusters, config.n, config.M, config.conf_threshold)
     log(
         f"[run] {len(ids)} images, {index.usable_images} with objects, {len(counts)} labels, "
-        f"{len(index.cluster_members)} clusters"
+        f"{len(index.cluster_members)} clusters, retrieval {config.retrieval}"
     )
-    retriever = Retriever(index, image_paths, config.ssim_mode, config.ssim_size)
+    phase3 = prepare_phase3(config, ids, image_paths, index, paths, log)
+    retriever = make_retriever(config, index, image_paths, phase3.get("descriptors"), phase3.get("model"),
+                               phase3.get("search"))
 
     log("[run] Capacity experiment")
     capacity, capacity_checks = run_capacity(config, index, retriever, image_paths)
@@ -184,6 +235,13 @@ def run_baseline(config, paths: Paths, label: str = "", allow_dirty: bool = Fals
             },
             "aux_bits_fixed": float(capacity["aux_bits_fixed"].iloc[0]),
             "aux_bits_tight": round(float(capacity["aux_bits_tight"].iloc[0]), 2),
+            "retrieval": config.retrieval,
+            "descriptor": None if config.uses_clusters else config.descriptor,
+            "cluster_bits_sent": round(float(np.log2(len(index.cluster_members))), 3)
+            if len(index.cluster_members) > 1 else 0.0,
+            "images_searched": phase3["images_searched"],
+            "bound_bits_per_image": phase3["bound_bits_per_image"],
+            "retrievability": phase3.get("retrievability"),
             "images_total": len(ids),
             "images_with_objects": index.usable_images,
             "labels_detected": len(counts),

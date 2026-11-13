@@ -11,6 +11,8 @@ import yaml
 DATASETS = ("voc2007", "voc2012", "coco2014", "synthetic")
 SSIM_MODES = ("global", "windowed")
 CLUSTER_ALGORITHMS = ("kmeans", "minibatch")
+RETRIEVAL_MODES = ("cluster_ssim", "sscd", "sscd_align")  # Phase 3, Part B
+DESCRIPTORS = ("sscd_disc_mixup", "pixels")  # "pixels" is for tests only
 
 
 class ConfigError(ValueError):
@@ -38,6 +40,11 @@ class Config:
     seed: int = 0
     bootstrap_samples: int = 1000
     expected_images: int = 0  # 0 means use the dataset's published count
+    # Phase 3. The defaults reproduce the paper exactly.
+    retrieval: str = "cluster_ssim"  # cluster_ssim = paper; sscd / sscd_align search everything, no cluster ID
+    descriptor: str = "sscd_disc_mixup"
+    retrieval_top_k: int = 10  # sscd_align: SSCD shortlist that alignment re-ranks
+    usable_threshold: float = 0.0  # 0 = off; else share of simulated attacks an image must survive to be sent
 
     def __post_init__(self):
         if self.dataset not in DATASETS:
@@ -48,6 +55,16 @@ class Config:
             raise ConfigError(
                 f"cluster_algorithm must be one of {CLUSTER_ALGORITHMS}, got {self.cluster_algorithm!r}"
             )
+        if self.retrieval not in RETRIEVAL_MODES:
+            raise ConfigError(f"retrieval must be one of {RETRIEVAL_MODES}, got {self.retrieval!r}")
+        if self.descriptor not in DESCRIPTORS:
+            raise ConfigError(f"descriptor must be one of {DESCRIPTORS}, got {self.descriptor!r}")
+        if self.retrieval_top_k < 1:
+            raise ConfigError("retrieval_top_k must be at least 1")
+        if not 0.0 <= self.usable_threshold <= 1.0:
+            raise ConfigError("usable_threshold must be between 0 and 1")
+        if self.usable_threshold > 0 and self.retrieval == "cluster_ssim":
+            raise ConfigError("usable_threshold needs retrieval sscd or sscd_align (the check uses SSCD)")
         if not 1 <= self.n <= 8:
             raise ConfigError(f"n must be between 1 and 8, got {self.n}")
         if not 1 <= self.M <= 9:
@@ -69,7 +86,18 @@ class Config:
     @property
     def tag(self) -> str:
         """Short name used in run folders."""
-        return f"{self.dataset}_n{self.n}_M{self.M}_seed{self.seed}"
+        tag = f"{self.dataset}_n{self.n}_M{self.M}_seed{self.seed}"
+        if self.retrieval != "cluster_ssim":
+            tag += f"_{self.retrieval}"
+            if self.descriptor != "sscd_disc_mixup":
+                tag += f"-{self.descriptor}"
+        if self.usable_threshold > 0:
+            tag += f"_usable{self.usable_threshold:g}"
+        return tag
+
+    @property
+    def uses_clusters(self) -> bool:
+        return self.retrieval == "cluster_ssim"
 
 
 def _coerce(name: str, value):
