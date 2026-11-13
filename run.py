@@ -71,7 +71,8 @@ def command_baseline(args) -> int:
 
 def command_sweep(args) -> int:
     base = load_config(args.config, args.set)
-    if args.param not in ("n", "M", "seed", "k", "conf_threshold", "ssim_mode"):
+    if args.param not in ("n", "M", "seed", "k", "conf_threshold", "ssim_mode", "retrieval", "usable_threshold",
+                          "retrieval_top_k"):
         raise ConfigError(f"Cannot sweep {args.param!r}")
     failures = []
     for value in args.values:
@@ -97,6 +98,39 @@ def command_ordering(args) -> int:
     config = load_config(args.config, args.set)
     lambdas = [float(value) for value in args.lambdas]
     run_ordering(config, paths_from(args), lambdas, args.trials, args.label, args.allow_dirty)
+    return 0
+
+
+def command_descriptors(args) -> int:
+    from stego.descriptors import run_descriptor_extraction
+
+    config = load_config(args.config, args.set)
+    paths = paths_from(args)
+    ids, image_paths = discover_images(config, paths.data_root)
+    run_descriptor_extraction(config, ids, image_paths, paths.cache_dir, paths.read_dirs, args.batch_size, args.weights)
+    return 0
+
+
+def command_retrievability(args) -> int:
+    import json
+
+    import numpy as np
+
+    from stego.descriptors import DescriptorModel, load_descriptors
+    from stego.mapping import build_index
+    from stego.retrievability import run_check, sendable_images, usable_report
+
+    config = load_config(args.config, args.set)
+    paths = paths_from(args)
+    ids, image_paths = discover_images(config, paths.data_root)
+    extraction = cache.load_extraction(ids, config.dataset, paths.cache_dir, paths.read_dirs)
+    index = build_index(ids, extraction.objects, np.zeros(len(ids), dtype=np.int32), config.n, config.M,
+                        config.conf_threshold)
+    descriptors = load_descriptors(ids, config.dataset, config.descriptor, paths.cache_dir, paths.read_dirs)
+    model = DescriptorModel(config.descriptor, args.weights, Path(paths.cache_dir) / "weights")
+    sendable = sendable_images(index)
+    hits = run_check(config, ids, image_paths, descriptors, model, sendable, paths.cache_dir, paths.read_dirs)
+    print(json.dumps(usable_report(hits, sendable), indent=2))
     return 0
 
 
@@ -141,9 +175,22 @@ def command_smoke(args) -> int:
             "robustness_segments": 8,
             "bootstrap_samples": 100,
         }
-        settings = [{"n": 6, "M": 4}, {"n": 3, "M": 4}, {"n": 6, "M": 6}]
+        settings = [
+            {"n": 6, "M": 4},
+            {"n": 3, "M": 4},
+            {"n": 6, "M": 6},
+            # Phase 3 path with the test-only descriptor (no PyTorch needed).
+            {"n": 6, "M": 4, "retrieval": "sscd", "descriptor": "pixels"},
+            {"n": 6, "M": 4, "retrieval": "sscd_align", "descriptor": "pixels", "usable_threshold": 0.5},
+        ]
         paths = resolve_paths(str(data_root), str(root / "cache"), str(root / "experiments" / "runs"), [])
         paths.read_dirs = []
+        from stego.data import discover_images as find
+        from stego.descriptors import run_descriptor_extraction
+
+        smoke_config = build_config({**base, "descriptor": "pixels"})
+        smoke_ids, smoke_paths = find(smoke_config, data_root)
+        run_descriptor_extraction(smoke_config, smoke_ids, smoke_paths, paths.cache_dir, [], log=lambda message: None)
         failed = []
         for setting in settings:
             config = build_config({**base, **setting})
@@ -190,7 +237,8 @@ def main() -> int:
 
     sub = commands.add_parser("sweep", help="Run the baseline for several values of one setting")
     add_common(sub)
-    sub.add_argument("--param", required=True, help="Setting to change: n, M, seed, k, conf_threshold or ssim_mode")
+    sub.add_argument("--param", required=True, help="Setting to change: n, M, seed, k, conf_threshold, ssim_mode, retrieval, "
+                     "usable_threshold or retrieval_top_k")
     sub.add_argument("--values", required=True, nargs="+", help="Values to run, such as 3 4 5 6")
     sub.add_argument("--label", default="")
     sub.add_argument("--allow-dirty", action="store_true")
@@ -204,6 +252,17 @@ def main() -> int:
     sub.add_argument("--label", default="")
     sub.add_argument("--allow-dirty", action="store_true")
     sub.set_defaults(func=command_ordering)
+
+    sub = commands.add_parser("descriptors", help="Phase 3 GPU pass: one SSCD descriptor per database image")
+    add_common(sub)
+    sub.add_argument("--batch-size", type=int, default=32)
+    sub.add_argument("--weights", help="Path to sscd_disc_mixup.torchscript.pt. Default: download it")
+    sub.set_defaults(func=command_descriptors)
+
+    sub = commands.add_parser("retrievability", help="Phase 3 GPU pass: attack every image and check it is found again")
+    add_common(sub)
+    sub.add_argument("--weights", help="Path to sscd_disc_mixup.torchscript.pt. Default: download it")
+    sub.set_defaults(func=command_retrievability)
 
     sub = commands.add_parser("dashboard", help="Rebuild experiments/RESULTS_DASHBOARD.md")
     sub.add_argument("--runs-dir", default=str(REPO_ROOT / "experiments" / "runs"))
@@ -223,6 +282,7 @@ def main() -> int:
             return 2
         raise
     except (ConfigError, DataError, MappingError, cache.CacheError, RuntimeError) as error:
+        # DescriptorError is a RuntimeError, so missing descriptors land here too.
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
