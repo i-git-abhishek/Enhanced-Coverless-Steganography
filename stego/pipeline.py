@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from . import cache, paper_refs, tracking
-from .attacks import NO_ATTACK, TABLE_IX_ORDER
+from .attacks import EXTENDED_ORDER, NO_ATTACK, TABLE_IX_ORDER
 from .data import discover_images, expected_count
 from .evaluate import (
     attack_group_means,
@@ -96,7 +96,7 @@ def evaluate_checks(config, index, label_counts, capacity, capacity_checks, summ
     table = summary.set_index("attack")
     add(
         "all_attacks_present",
-        list(summary["attack"]) == [NO_ATTACK, *ordered_attacks()],
+        list(summary["attack"]) == [NO_ATTACK, *ordered_attacks(config.extended_attacks)],
         f"{len(summary) - 1} attacks plus no-attack control",
     )
     no_attack_acc = float(table.loc[NO_ATTACK, "acc_percent"])
@@ -152,9 +152,15 @@ def prepare_phase3(config, ids, image_paths, index: ImageIndex, paths: Paths, lo
     return info
 
 
-def ordered_attacks() -> list[str]:
-    """Table IX order, which is also the order attacks are run in."""
-    return list(TABLE_IX_ORDER)
+def ordered_attacks(extended: bool = False) -> list[str]:
+    """Table IX order, which is also the order attacks are run in.
+
+    When *extended* is True, the 12 combined and heavy attacks are appended.
+    """
+    result = list(TABLE_IX_ORDER)
+    if extended:
+        result.extend(EXTENDED_ORDER)
+    return result
 
 
 def run_baseline(config, paths: Paths, label: str = "", allow_dirty: bool = False, log=print) -> Path:
@@ -256,7 +262,13 @@ def run_baseline(config, paths: Paths, label: str = "", allow_dirty: bool = Fals
     for name, item in checks.items():
         log(f"[check] {'PASS' if item['passed'] else 'FAIL'}  {name}: {item['detail']}")
     log(f"[run] Mean images: {mean_images}  paper: {paper_capacity}")
-    log(f"[run] Mean ACC over 22 attacks: {means['mean_acc_22_attacks']}%")
+    if "mean_acc_all_attacks" in means:
+        attack_count = len(ordered_attacks(config.extended_attacks))
+        log(f"[run] Mean ACC over {attack_count} attacks: {means['mean_acc_all_attacks']}%")
+        log(f"[run]   22 original: {means['mean_acc_22_attacks']}%, "
+            f"combined: {means.get('mean_acc_combined', '-')}%, heavy: {means.get('mean_acc_heavy', '-')}%")
+    else:
+        log(f"[run] Mean ACC over 22 attacks: {means['mean_acc_22_attacks']}%")
     log(f"[run] Status: {'OFFICIAL' if official else 'NOT OFFICIAL'}")
     log(f"[run] Saved: {run_folder}")
     return run_folder

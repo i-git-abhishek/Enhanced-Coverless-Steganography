@@ -45,6 +45,7 @@ class Config:
     descriptor: str = "sscd_disc_mixup"
     retrieval_top_k: int = 10  # sscd_align: SSCD shortlist that alignment re-ranks
     usable_threshold: float = 0.0  # 0 = off; else share of simulated attacks an image must survive to be sent
+    extended_attacks: bool = False  # adds 12 tougher attacks (combined + heavy) to the robustness test
 
     def __post_init__(self):
         if self.dataset not in DATASETS:
@@ -93,6 +94,8 @@ class Config:
                 tag += f"-{self.descriptor}"
         if self.usable_threshold > 0:
             tag += f"_usable{self.usable_threshold:g}"
+        if self.extended_attacks:
+            tag += "_ext"
         return tag
 
     @property
@@ -103,6 +106,17 @@ class Config:
 def _coerce(name: str, value):
     target = {f.name: f.type for f in fields(Config)}[name]
     try:
+        if target == "bool":
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return bool(int(value))
+            if isinstance(value, str):
+                if value.lower() in ("true", "1", "yes"):
+                    return True
+                if value.lower() in ("false", "0", "no"):
+                    return False
+            raise ValueError
         if target == "int":
             if isinstance(value, bool) or float(value) != int(float(value)):
                 raise ValueError

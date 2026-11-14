@@ -8,7 +8,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .attacks import GEOMETRIC, NO_ATTACK, NON_GEOMETRIC, TABLE_IX_ORDER, attack_rng, build_attacks
+from .attacks import (
+    COMBINED, EXTENDED_ORDER, GEOMETRIC, HEAVY, NO_ATTACK, NON_GEOMETRIC,
+    TABLE_IX_ORDER, attack_rng, build_attacks,
+)
 from .hiding import bytes_to_segments, hide_segments, segments_to_bytes
 from .mapping import ImageIndex
 from .recovery import Retriever, decode_image, read_image
@@ -101,7 +104,7 @@ def run_robustness(config, index: ImageIndex, retriever: Retriever, paths: dict[
         trials.append((segments, result.stego))
 
     rows = []
-    attacks = build_attacks(config.gamma_exponent)
+    attacks = build_attacks(config.gamma_exponent, extended=config.extended_attacks)
     for attack_number, (name, attack) in enumerate(attacks.items(), start=1):
         for trial, (segments, stego) in enumerate(trials):
             segment_position = 0
@@ -174,9 +177,20 @@ def summarise_robustness(segments: pd.DataFrame, config, paper_row: dict | None)
 
 def attack_group_means(summary: pd.DataFrame) -> dict[str, float]:
     values = summary.set_index("attack")["acc_percent"]
-    return {
+    means: dict[str, float] = {
         "mean_acc_22_attacks": round(float(values.loc[list(TABLE_IX_ORDER)].mean()), 2),
         "mean_acc_geometric": round(float(values.loc[list(GEOMETRIC)].mean()), 2),
         "mean_acc_non_geometric": round(float(values.loc[list(NON_GEOMETRIC)].mean()), 2),
         "no_attack_acc": round(float(values.loc[NO_ATTACK]), 2),
     }
+    # Extended attack stats, only when those attacks are present in the data.
+    combined_present = [name for name in COMBINED if name in values.index]
+    heavy_present = [name for name in HEAVY if name in values.index]
+    if combined_present:
+        means["mean_acc_combined"] = round(float(values.loc[combined_present].mean()), 2)
+    if heavy_present:
+        means["mean_acc_heavy"] = round(float(values.loc[heavy_present].mean()), 2)
+    if combined_present or heavy_present:
+        all_attacks = list(TABLE_IX_ORDER) + combined_present + heavy_present
+        means["mean_acc_all_attacks"] = round(float(values.loc[all_attacks].mean()), 2)
+    return means

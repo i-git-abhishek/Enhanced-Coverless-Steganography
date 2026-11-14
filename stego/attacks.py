@@ -1,6 +1,11 @@
 """The 22 attacks of the paper's Table IX, plus a required no-attack control.
 
 Where Table IX leaves a detail open, the choice is listed in MANUAL.md section 12.
+
+Extended attacks (combined and heavy) stress-test retrieval beyond the paper's
+original suite. They are enabled by setting ``extended_attacks: true`` in the
+config. The retrievability pre-check always uses only the original 22 attacks,
+so the extended attacks are genuinely unseen during filtering.
 """
 
 from __future__ import annotations
@@ -25,6 +30,26 @@ NON_GEOMETRIC = (
     "JPEG Compression", "Histogram Equalization", "Gamma Correction",
 )
 TABLE_IX_ORDER = GEOMETRIC + NON_GEOMETRIC
+
+# Extended attacks: combined (chain of operations) and heavy (single but stronger).
+# These are NOT used in the retrievability pre-check, so they test generalisation.
+COMBINED = (
+    "JPEG Q50 + Rotation 15°",
+    "JPEG Q30 + Gauss Noise (heavy)",
+    "Crop 10% + JPEG Q50 + Resize 0.5×",
+    "Rotation 20° + Gauss Noise + JPEG Q70",
+    "Edge Crop 15% + S&P Noise + JPEG Q50",
+    "Rotation 30° + Crop 10% + Gauss Noise (heavy)",
+)
+HEAVY = (
+    "JPEG Quality 50",
+    "JPEG Quality 30",
+    "JPEG Quality 10",
+    "Heavy Gauss Noise",
+    "Heavy Salt & Pepper",
+    "Large Median Filter 7×7",
+)
+EXTENDED_ORDER = COMBINED + HEAVY
 
 
 def center_crop(image: np.ndarray, ratio: float) -> np.ndarray:
@@ -111,9 +136,14 @@ def gamma_correction(image: np.ndarray, exponent: float) -> np.ndarray:
 AttackFunction = Callable[[np.ndarray, np.random.Generator], np.ndarray]
 
 
-def build_attacks(gamma_exponent: float = 0.8) -> dict[str, AttackFunction]:
-    """No attack first, followed by Table IX in the order of Table X."""
-    return {
+def build_attacks(gamma_exponent: float = 0.8, *, extended: bool = False) -> dict[str, AttackFunction]:
+    """No attack first, followed by Table IX in the order of Table X.
+
+    When *extended* is True, combined and heavy attacks are appended after the
+    original 22. The retrievability pre-check never passes ``extended=True``,
+    so these attacks are unseen during image filtering.
+    """
+    attacks: dict[str, AttackFunction] = {
         NO_ATTACK: lambda image, rng: image.copy(),
         "Center Cropping 5%": lambda image, rng: center_crop(image, 0.05),
         "Center Cropping 10%": lambda image, rng: center_crop(image, 0.10),
@@ -137,6 +167,29 @@ def build_attacks(gamma_exponent: float = 0.8) -> dict[str, AttackFunction]:
         "JPEG Compression": lambda image, rng: jpeg(image, 90),
         "Histogram Equalization": lambda image, rng: histogram_equalization(image),
         "Gamma Correction": lambda image, rng: gamma_correction(image, gamma_exponent),
+    }
+    if extended:
+        attacks.update(_extended_attacks(gamma_exponent))
+    return attacks
+
+
+def _extended_attacks(gamma_exponent: float) -> dict[str, AttackFunction]:
+    """Combined and heavy attacks that stress-test retrieval beyond the paper."""
+    return {
+        # --- Combined attacks: chain of operations in one pass ---
+        "JPEG Q50 + Rotation 15°": lambda image, rng: rotate(jpeg(image, 50), 15),
+        "JPEG Q30 + Gauss Noise (heavy)": lambda image, rng: gauss_noise(jpeg(image, 30), 0.01, rng),
+        "Crop 10% + JPEG Q50 + Resize 0.5×": lambda image, rng: scale(jpeg(center_crop(image, 0.10), 50), 0.5),
+        "Rotation 20° + Gauss Noise + JPEG Q70": lambda image, rng: jpeg(gauss_noise(rotate(image, 20), 0.005, rng), 70),
+        "Edge Crop 15% + S&P Noise + JPEG Q50": lambda image, rng: jpeg(salt_and_pepper(edge_crop(image, 0.15), 0.005, rng), 50),
+        "Rotation 30° + Crop 10% + Gauss Noise (heavy)": lambda image, rng: gauss_noise(center_crop(rotate(image, 30), 0.10), 0.01, rng),
+        # --- Heavy individual attacks: stronger than the paper's versions ---
+        "JPEG Quality 50": lambda image, rng: jpeg(image, 50),
+        "JPEG Quality 30": lambda image, rng: jpeg(image, 30),
+        "JPEG Quality 10": lambda image, rng: jpeg(image, 10),
+        "Heavy Gauss Noise": lambda image, rng: gauss_noise(image, 0.01, rng),
+        "Heavy Salt & Pepper": lambda image, rng: salt_and_pepper(image, 0.01, rng),
+        "Large Median Filter 7×7": lambda image, rng: cv2.medianBlur(image, 7),
     }
 
 
