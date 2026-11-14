@@ -5,3 +5,4 @@ n: 6
 M: 4
 k: 1024
 cluster_algorithm: minibatch
+expected_images: 164016
