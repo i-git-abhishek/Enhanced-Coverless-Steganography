@@ -141,7 +141,44 @@ def load_extraction(ids: list[str], dataset: str, cache_dir: Path, read_dirs: li
             objects.append(record["objects"])
         arrays.append(np.load(str(chunk)[: -len(".json.gz")] + ".npy"))
     if found_ids != ids:
-        raise CacheError(f"Cached image list does not match the dataset: {folder}")
+        found_set = set(found_ids)
+        expected_set = set(ids)
+        missing = sorted(expected_set - found_set)
+        extra = sorted(found_set - expected_set)
+        if not missing and not extra and len(found_ids) == len(ids):
+            # Same IDs, different order (e.g., chunk files reordered during dataset transfer).
+            # Reorder to match the expected list so the cache is usable.
+            id_to_idx = {fid: i for i, fid in enumerate(found_ids)}
+            new_order = [id_to_idx[eid] for eid in ids]
+            objects = [objects[i] for i in new_order]
+            found_ids = ids  # now matches
+            all_features = np.concatenate(arrays, axis=0)
+            arrays = [all_features[new_order]]
+            print(f"[cache] Reordered extraction cache to match dataset order: {folder}")
+        else:
+            diag = [f"Cached image list does not match the dataset: {folder}"]
+            diag.append(f"  expected {len(ids)} images, cache has {len(found_ids)}")
+            if missing:
+                diag.append(f"  {len(missing)} IDs missing from cache, first 5: {missing[:5]}")
+            if extra:
+                diag.append(f"  {len(extra)} extra IDs in cache, first 5: {extra[:5]}")
+            if len(found_ids) != len(ids):
+                diag.append(f"  chunks loaded: {len(chunks)}")
+                per_chunk = []
+                offset = 0
+                for chunk in chunks:
+                    with gzip.open(chunk, "rt", encoding="utf-8") as handle:
+                        n = len(json.load(handle))
+                    per_chunk.append(f"{chunk.name}:{n}")
+                    offset += n
+                diag.append(f"  records per chunk: {', '.join(per_chunk)}")
+            elif not missing and not extra:
+                # Same set, same length, but duplicates prevent reorder
+                from collections import Counter
+                dup_found = {k: v for k, v in Counter(found_ids).items() if v > 1}
+                if dup_found:
+                    diag.append(f"  duplicate IDs in cache: {dict(list(dup_found.items())[:5])}")
+            raise CacheError("\n".join(diag))
     features = np.concatenate(arrays, axis=0)
     if features.shape != (len(ids), FEATURE_DIM):
         raise CacheError(f"Cached features have the wrong shape {features.shape}: {folder}")
