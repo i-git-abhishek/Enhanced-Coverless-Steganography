@@ -155,7 +155,7 @@ def prepare_phase3(config, ids, image_paths, index: ImageIndex, paths: Paths, lo
 def ordered_attacks(extended: bool = False) -> list[str]:
     """Table IX order, which is also the order attacks are run in.
 
-    When *extended* is True, the 12 combined and heavy attacks are appended.
+    When *extended* is True, the 20 combined, heavy and extreme attacks are appended.
     """
     result = list(TABLE_IX_ORDER)
     if extended:
@@ -266,7 +266,8 @@ def run_baseline(config, paths: Paths, label: str = "", allow_dirty: bool = Fals
         attack_count = len(ordered_attacks(config.extended_attacks))
         log(f"[run] Mean ACC over {attack_count} attacks: {means['mean_acc_all_attacks']}%")
         log(f"[run]   22 original: {means['mean_acc_22_attacks']}%, "
-            f"combined: {means.get('mean_acc_combined', '-')}%, heavy: {means.get('mean_acc_heavy', '-')}%")
+            f"combined: {means.get('mean_acc_combined', '-')}%, heavy: {means.get('mean_acc_heavy', '-')}%, "
+            f"extreme: {means.get('mean_acc_extreme', '-')}%")
     else:
         log(f"[run] Mean ACC over 22 attacks: {means['mean_acc_22_attacks']}%")
     log(f"[run] Status: {'OFFICIAL' if official else 'NOT OFFICIAL'}")

@@ -76,13 +76,22 @@ def _discover_coco(root: Path) -> dict[str, Path]:
 
 
 def _discover_ade20k(root: Path) -> dict[str, Path]:
-    """ADE20K: images/training/ + images/validation/ under ADEChallengeData2016."""
+    """ADE20K (ADEChallengeData2016): images/training/ + images/validation/.
+
+    Only the photos are taken (ADE_train_*.jpg and ADE_val_*.jpg). Segmentation masks
+    (.png, also *_seg.png in the full ADE20K release) and the test split are never counted.
+    """
     images: dict[str, Path] = {}
     for folder, files in _walk(root):
-        # Accept images under any path containing 'images' with 'training' or 'validation'
         parts = [p.lower() for p in folder.relative_to(root).parts]
         if "images" in parts and ("training" in parts or "validation" in parts):
-            images.update(_images_in(folder, files))
+            images.update(
+                {
+                    name: folder / name
+                    for name in files
+                    if name.lower().endswith(".jpg") and name.lower().startswith(("ade_train_", "ade_val_"))
+                }
+            )
     return images
 
 

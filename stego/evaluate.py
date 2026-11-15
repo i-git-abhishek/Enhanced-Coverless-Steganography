@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .attacks import (
-    COMBINED, EXTENDED_ORDER, GEOMETRIC, HEAVY, NO_ATTACK, NON_GEOMETRIC,
+    COMBINED, EXTENDED_ORDER, EXTREME, GEOMETRIC, HEAVY, NO_ATTACK, NON_GEOMETRIC,
     TABLE_IX_ORDER, attack_rng, build_attacks,
 )
 from .hiding import bytes_to_segments, hide_segments, segments_to_bytes
@@ -186,11 +186,14 @@ def attack_group_means(summary: pd.DataFrame) -> dict[str, float]:
     # Extended attack stats, only when those attacks are present in the data.
     combined_present = [name for name in COMBINED if name in values.index]
     heavy_present = [name for name in HEAVY if name in values.index]
+    extreme_present = [name for name in EXTREME if name in values.index]
     if combined_present:
         means["mean_acc_combined"] = round(float(values.loc[combined_present].mean()), 2)
     if heavy_present:
         means["mean_acc_heavy"] = round(float(values.loc[heavy_present].mean()), 2)
-    if combined_present or heavy_present:
-        all_attacks = list(TABLE_IX_ORDER) + combined_present + heavy_present
+    if extreme_present:
+        means["mean_acc_extreme"] = round(float(values.loc[extreme_present].mean()), 2)
+    if combined_present or heavy_present or extreme_present:
+        all_attacks = list(TABLE_IX_ORDER) + combined_present + heavy_present + extreme_present
         means["mean_acc_all_attacks"] = round(float(values.loc[all_attacks].mean()), 2)
     return means

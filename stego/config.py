@@ -45,7 +45,7 @@ class Config:
     descriptor: str = "sscd_disc_mixup"
     retrieval_top_k: int = 10  # sscd_align: SSCD shortlist that alignment re-ranks
     usable_threshold: float = 0.0  # 0 = off; else share of simulated attacks an image must survive to be sent
-    extended_attacks: bool = False  # adds 12 tougher attacks (combined + heavy) to the robustness test
+    extended_attacks: bool = False  # adds 20 tougher attacks (6 combined + 6 heavy + 8 extreme): 42 in total
 
     def __post_init__(self):
         if self.dataset not in DATASETS:

@@ -202,6 +202,36 @@ def test_voc2012_missing_list_names_the_problem(tmp_path):
         discover_images(config, tmp_path)
 
 
+def test_ade20k_takes_only_train_and_val_photos(tmp_path):
+    """ADEChallengeData2016 layout, plus the mask files of the full ADE20K release."""
+    base = tmp_path / "ade20k-dataset" / "ADEChallengeData2016"
+    _touch_images(base / "images" / "training", ["ADE_train_00000001.jpg", "ADE_train_00000002.jpg"])
+    _touch_images(base / "images" / "validation", ["ADE_val_00000001.jpg"])
+    _touch_images(base / "annotations" / "training", ["ADE_train_00000001.png"])
+    _touch_images(base / "images" / "training" / "bathroom", ["ADE_train_00000003.jpg", "ADE_train_00000003_seg.png"])
+    _touch_images(tmp_path / "release_test" / "testing", ["ADE_test_00000001.jpg"])
+    config = build_config({"dataset": "ade20k", "expected_images": 4})
+    assert discover_images(config, tmp_path)[0] == [
+        "ADE_train_00000001.jpg", "ADE_train_00000002.jpg", "ADE_train_00000003.jpg", "ADE_val_00000001.jpg",
+    ]
+    with pytest.raises(DataError, match="expected 22210"):
+        discover_images(build_config({"dataset": "ade20k"}), tmp_path)
+
+
+def test_extended_means_cover_all_42_attacks():
+    import pandas as pd
+
+    from stego.attacks import EXTENDED_ORDER, EXTREME, NO_ATTACK, TABLE_IX_ORDER
+    from stego.evaluate import attack_group_means
+
+    names = [NO_ATTACK, *TABLE_IX_ORDER, *EXTENDED_ORDER]
+    assert len(names) == 43
+    values = [100.0] * (1 + len(TABLE_IX_ORDER) + len(EXTENDED_ORDER) - len(EXTREME)) + [0.0] * len(EXTREME)
+    means = attack_group_means(pd.DataFrame({"attack": names, "acc_percent": values}))
+    assert means["mean_acc_extreme"] == 0.0
+    assert means["mean_acc_all_attacks"] == round(100.0 * 34 / 42, 2)
+
+
 def test_voc2007_is_not_confused_with_voc2012(tmp_path):
     _touch_images(tmp_path / "VOC2007" / "JPEGImages", ["a.jpg"])
     _touch_images(tmp_path / "VOC2012_train_val" / "JPEGImages", ["b.jpg"])

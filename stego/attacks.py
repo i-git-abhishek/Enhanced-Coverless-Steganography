@@ -150,8 +150,8 @@ AttackFunction = Callable[[np.ndarray, np.random.Generator], np.ndarray]
 def build_attacks(gamma_exponent: float = 0.8, *, extended: bool = False) -> dict[str, AttackFunction]:
     """No attack first, followed by Table IX in the order of Table X.
 
-    When *extended* is True, combined and heavy attacks are appended after the
-    original 22. The retrievability pre-check never passes ``extended=True``,
+    When *extended* is True, the 20 combined, heavy and extreme attacks are
+    appended after the original 22. The retrievability pre-check never passes ``extended=True``,
     so these attacks are unseen during image filtering.
     """
     attacks: dict[str, AttackFunction] = {
