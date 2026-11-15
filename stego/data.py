@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-PUBLISHED_COUNTS = {"voc2007": 9963, "voc2012": 11540, "coco2014": 164062}
+PUBLISHED_COUNTS = {"voc2007": 9963, "voc2012": 11540, "coco2014": 164062, "ade20k": 22210}
 _IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 
 
@@ -75,6 +75,17 @@ def _discover_coco(root: Path) -> dict[str, Path]:
     return images
 
 
+def _discover_ade20k(root: Path) -> dict[str, Path]:
+    """ADE20K: images/training/ + images/validation/ under ADEChallengeData2016."""
+    images: dict[str, Path] = {}
+    for folder, files in _walk(root):
+        # Accept images under any path containing 'images' with 'training' or 'validation'
+        parts = [p.lower() for p in folder.relative_to(root).parts]
+        if "images" in parts and ("training" in parts or "validation" in parts):
+            images.update(_images_in(folder, files))
+    return images
+
+
 def _discover_synthetic(root: Path) -> dict[str, Path]:
     folder = root / "images"
     return _images_in(folder, sorted(os.listdir(folder))) if folder.is_dir() else {}
@@ -102,6 +113,8 @@ def discover_images(config, root: str | Path) -> tuple[list[str], dict[str, Path
         images = _discover_voc(root, "2012", use_trainval_list=True)
     elif config.dataset == "coco2014":
         images = _discover_coco(root)
+    elif config.dataset == "ade20k":
+        images = _discover_ade20k(root)
     else:
         images = _discover_synthetic(root)
 

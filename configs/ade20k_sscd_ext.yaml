@@ -1,0 +1,7 @@
+# ADE20K with SSCD retrieval + all 42 attacks (22 standard + 12 combined/heavy + 8 extreme)
+dataset: ade20k
+n: 6
+M: 4
+k: 256
+retrieval: sscd
+extended_attacks: true

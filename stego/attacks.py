@@ -49,7 +49,18 @@ HEAVY = (
     "Heavy Salt & Pepper",
     "Large Median Filter 7×7",
 )
-EXTENDED_ORDER = COMBINED + HEAVY
+# Extreme attacks: designed to break SSCD's 100% record.
+EXTREME = (
+    "Rotation 70°",
+    "Rotation 90°",
+    "Center Cropping 30%",
+    "Edge Crop 30%",
+    "Translation (120, 80)",
+    "JPEG Q5",
+    "Rotation 45° + JPEG Q30 + Heavy Gauss Noise",
+    "Edge Crop 20% + Rotation 30° + JPEG Q30",
+)
+EXTENDED_ORDER = COMBINED + HEAVY + EXTREME
 
 
 def center_crop(image: np.ndarray, ratio: float) -> np.ndarray:
@@ -170,6 +181,7 @@ def build_attacks(gamma_exponent: float = 0.8, *, extended: bool = False) -> dic
     }
     if extended:
         attacks.update(_extended_attacks(gamma_exponent))
+        attacks.update(_extreme_attacks(gamma_exponent))
     return attacks
 
 
@@ -190,6 +202,24 @@ def _extended_attacks(gamma_exponent: float) -> dict[str, AttackFunction]:
         "Heavy Gauss Noise": lambda image, rng: gauss_noise(image, 0.01, rng),
         "Heavy Salt & Pepper": lambda image, rng: salt_and_pepper(image, 0.01, rng),
         "Large Median Filter 7×7": lambda image, rng: cv2.medianBlur(image, 7),
+    }
+
+
+def _extreme_attacks(gamma_exponent: float) -> dict[str, AttackFunction]:
+    """Extreme attacks designed to push past SSCD's 100% ceiling."""
+    return {
+        "Rotation 70°": lambda image, rng: rotate(image, 70),
+        "Rotation 90°": lambda image, rng: rotate(image, 90),
+        "Center Cropping 30%": lambda image, rng: center_crop(image, 0.30),
+        "Edge Crop 30%": lambda image, rng: edge_crop(image, 0.30),
+        "Translation (120, 80)": lambda image, rng: translate(image, 120, 80),
+        "JPEG Q5": lambda image, rng: jpeg(image, 5),
+        "Rotation 45° + JPEG Q30 + Heavy Gauss Noise": lambda image, rng: gauss_noise(
+            jpeg(rotate(image, 45), 30), 0.01, rng
+        ),
+        "Edge Crop 20% + Rotation 30° + JPEG Q30": lambda image, rng: jpeg(
+            rotate(edge_crop(image, 0.20), 30), 30
+        ),
     }
 
 

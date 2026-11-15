@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-DATASETS = ("voc2007", "voc2012", "coco2014", "synthetic")
+DATASETS = ("voc2007", "voc2012", "coco2014", "ade20k", "synthetic")
 SSIM_MODES = ("global", "windowed")
 CLUSTER_ALGORITHMS = ("kmeans", "minibatch")
 RETRIEVAL_MODES = ("cluster_ssim", "sscd", "sscd_align")  # Phase 3, Part B

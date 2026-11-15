@@ -1,0 +1,5 @@
+# ADE20K baseline (cluster SSIM, 22 standard attacks)
+dataset: ade20k
+n: 6
+M: 4
+k: 256

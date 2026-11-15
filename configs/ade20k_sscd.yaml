@@ -1,0 +1,6 @@
+# ADE20K with SSCD retrieval (no clustering, no retrievability)
+dataset: ade20k
+n: 6
+M: 4
+k: 256
+retrieval: sscd
