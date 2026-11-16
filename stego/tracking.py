@@ -135,6 +135,7 @@ def build_dashboard(runs_dir: Path, output: Path) -> Path:
                 "Combined %": summary["means"].get("mean_acc_combined"),
                 "Heavy %": summary["means"].get("mean_acc_heavy"),
                 "Extreme %": summary["means"].get("mean_acc_extreme"),
+                "Extreme II %": summary["means"].get("mean_acc_extreme2"),
                 "All attacks ACC %": summary["means"].get("mean_acc_all_attacks"),
                 "Images, 100 B": capacity.get("100"),
                 "Bits per image, 100 B": summary["capacity_bits_per_image"].get("100"),

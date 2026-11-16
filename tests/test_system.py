@@ -368,3 +368,34 @@ def test_label_only_below_top_m_cannot_create_an_unusable_group():
     index = build_index(["0.jpg", "1.jpg"], [[*big, small], big[:1]], np.zeros(2, dtype=int), 1, 2, 0.9)
     assert set(index.dictionary) == {"a", "b"}
     assert (index.counts.sum(axis=0) > 0).all()
+
+
+def test_extreme2_attacks_are_separate_and_repeatable():
+    import pandas as pd
+
+    from stego.attacks import EXTENDED_ORDER, EXTREME2, NO_ATTACK, TABLE_IX_ORDER, attack_rng, build_attacks
+    from stego.evaluate import attack_group_means
+    from stego.pipeline import ordered_attacks
+
+    assert len(EXTREME2) == 12
+    assert not set(EXTREME2) & set(TABLE_IX_ORDER + EXTENDED_ORDER)
+    assert list(build_attacks(extreme2=True))[1:] == [*TABLE_IX_ORDER, *EXTREME2]
+    assert list(build_attacks(extended=True, extreme2=True))[1:] == ordered_attacks(True, True)
+    assert len(ordered_attacks(True, True)) == 54
+    image = np.random.default_rng(0).integers(0, 256, size=(60, 80, 3), dtype=np.uint8)
+    attacks = build_attacks(extreme2=True)
+    for name in EXTREME2:
+        one = attacks[name](image, attack_rng(0, name, 0, 0))
+        two = attacks[name](image, attack_rng(0, name, 0, 0))
+        assert one.dtype == np.uint8 and one.ndim == 3, name
+        assert np.array_equal(one, two), name
+        assert one.shape != image.shape or not np.array_equal(one, image), name
+    names = [NO_ATTACK, *TABLE_IX_ORDER, *EXTENDED_ORDER, *EXTREME2]
+    values = [100.0] * (1 + len(TABLE_IX_ORDER) + len(EXTENDED_ORDER)) + [50.0] * len(EXTREME2)
+    means = attack_group_means(pd.DataFrame({"attack": names, "acc_percent": values}))
+    assert means["mean_acc_extreme2"] == 50.0
+    assert means["mean_acc_all_attacks"] == 100.0  # Extreme II never enters the 42-attack mean
+
+
+def test_extreme2_changes_the_run_tag():
+    assert build_config({"dataset": "voc2012", "extended_attacks": True, "extreme2_attacks": True}).tag.endswith("_ext_x2")

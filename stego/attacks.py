@@ -61,6 +61,23 @@ EXTREME = (
     "Edge Crop 20% + Rotation 30° + JPEG Q30",
 )
 EXTENDED_ORDER = COMBINED + HEAVY + EXTREME
+# Extreme II: a breaking-point suite, far past the paper's protocol, to find where SSCD
+# retrieval starts to fail. Enabled separately with ``extreme2_attacks: true`` and kept out
+# of ``mean_acc_all_attacks`` so the 42-attack results stay comparable.
+EXTREME2 = (
+    "JPEG Q3",
+    "Salt & Pepper 10%",
+    "Salt & Pepper 20%",
+    "Gauss Noise σ=0.20",
+    "Gauss Noise σ=0.30",
+    "Center Cropping 50%",
+    "Center Cropping 70%",
+    "Edge Cropping 75%",
+    "Gauss Blur 31×31 (σ=8)",
+    "Resize 0.1×",
+    "Rotation 45° + Center Crop 50% + JPEG Q10",
+    "S&P 10% + JPEG Q10 + Rotation 30°",
+)
 
 
 def center_crop(image: np.ndarray, ratio: float) -> np.ndarray:
@@ -97,6 +114,13 @@ def translate(image: np.ndarray, dx: int, dy: int) -> np.ndarray:
 def scale(image: np.ndarray, factor: float) -> np.ndarray:
     height, width = image.shape[:2]
     return cv2.resize(image, (int(width * factor), int(height * factor)), interpolation=cv2.INTER_LINEAR)
+
+
+def downscale(image: np.ndarray, factor: float) -> np.ndarray:
+    """Shrinks with area averaging; used only by Extreme II so the older attacks are unchanged."""
+    height, width = image.shape[:2]
+    size = (max(1, int(width * factor)), max(1, int(height * factor)))
+    return cv2.resize(image, size, interpolation=cv2.INTER_AREA)
 
 
 def _from_unit(image: np.ndarray) -> np.ndarray:
@@ -147,12 +171,15 @@ def gamma_correction(image: np.ndarray, exponent: float) -> np.ndarray:
 AttackFunction = Callable[[np.ndarray, np.random.Generator], np.ndarray]
 
 
-def build_attacks(gamma_exponent: float = 0.8, *, extended: bool = False) -> dict[str, AttackFunction]:
+def build_attacks(
+    gamma_exponent: float = 0.8, *, extended: bool = False, extreme2: bool = False
+) -> dict[str, AttackFunction]:
     """No attack first, followed by Table IX in the order of Table X.
 
     When *extended* is True, the 20 combined, heavy and extreme attacks are
     appended after the original 22. The retrievability pre-check never passes ``extended=True``,
-    so these attacks are unseen during image filtering.
+    so these attacks are unseen during image filtering. When *extreme2* is True, the 12
+    Extreme II attacks are appended last.
     """
     attacks: dict[str, AttackFunction] = {
         NO_ATTACK: lambda image, rng: image.copy(),
@@ -182,6 +209,8 @@ def build_attacks(gamma_exponent: float = 0.8, *, extended: bool = False) -> dic
     if extended:
         attacks.update(_extended_attacks(gamma_exponent))
         attacks.update(_extreme_attacks(gamma_exponent))
+    if extreme2:
+        attacks.update(_extreme2_attacks())
     return attacks
 
 
@@ -219,6 +248,28 @@ def _extreme_attacks(gamma_exponent: float) -> dict[str, AttackFunction]:
         ),
         "Edge Crop 20% + Rotation 30° + JPEG Q30": lambda image, rng: jpeg(
             rotate(edge_crop(image, 0.20), 30), 30
+        ),
+    }
+
+
+def _extreme2_attacks() -> dict[str, AttackFunction]:
+    """Extreme II: breaking-point attacks, meant to find where SSCD retrieval fails."""
+    return {
+        "JPEG Q3": lambda image, rng: jpeg(image, 3),
+        "Salt & Pepper 10%": lambda image, rng: salt_and_pepper(image, 0.10, rng),
+        "Salt & Pepper 20%": lambda image, rng: salt_and_pepper(image, 0.20, rng),
+        "Gauss Noise σ=0.20": lambda image, rng: gauss_noise(image, 0.20, rng),
+        "Gauss Noise σ=0.30": lambda image, rng: gauss_noise(image, 0.30, rng),
+        "Center Cropping 50%": lambda image, rng: center_crop(image, 0.50),
+        "Center Cropping 70%": lambda image, rng: center_crop(image, 0.70),
+        "Edge Cropping 75%": lambda image, rng: edge_crop(image, 0.75),
+        "Gauss Blur 31×31 (σ=8)": lambda image, rng: cv2.GaussianBlur(image, (31, 31), 8),
+        "Resize 0.1×": lambda image, rng: downscale(image, 0.1),
+        "Rotation 45° + Center Crop 50% + JPEG Q10": lambda image, rng: jpeg(
+            center_crop(rotate(image, 45), 0.50), 10
+        ),
+        "S&P 10% + JPEG Q10 + Rotation 30°": lambda image, rng: rotate(
+            jpeg(salt_and_pepper(image, 0.10, rng), 10), 30
         ),
     }
 

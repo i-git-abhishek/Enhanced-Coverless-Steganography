@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .attacks import (
-    COMBINED, EXTENDED_ORDER, EXTREME, GEOMETRIC, HEAVY, NO_ATTACK, NON_GEOMETRIC,
+    COMBINED, EXTENDED_ORDER, EXTREME, EXTREME2, GEOMETRIC, HEAVY, NO_ATTACK, NON_GEOMETRIC,
     TABLE_IX_ORDER, attack_rng, build_attacks,
 )
 from .hiding import bytes_to_segments, hide_segments, segments_to_bytes
@@ -104,7 +104,9 @@ def run_robustness(config, index: ImageIndex, retriever: Retriever, paths: dict[
         trials.append((segments, result.stego))
 
     rows = []
-    attacks = build_attacks(config.gamma_exponent, extended=config.extended_attacks)
+    attacks = build_attacks(
+        config.gamma_exponent, extended=config.extended_attacks, extreme2=config.extreme2_attacks
+    )
     for attack_number, (name, attack) in enumerate(attacks.items(), start=1):
         for trial, (segments, stego) in enumerate(trials):
             segment_position = 0
@@ -196,4 +198,8 @@ def attack_group_means(summary: pd.DataFrame) -> dict[str, float]:
     if combined_present or heavy_present or extreme_present:
         all_attacks = list(TABLE_IX_ORDER) + combined_present + heavy_present + extreme_present
         means["mean_acc_all_attacks"] = round(float(values.loc[all_attacks].mean()), 2)
+    # Extreme II is reported on its own and never folded into mean_acc_all_attacks.
+    extreme2_present = [name for name in EXTREME2 if name in values.index]
+    if extreme2_present:
+        means["mean_acc_extreme2"] = round(float(values.loc[extreme2_present].mean()), 2)
     return means

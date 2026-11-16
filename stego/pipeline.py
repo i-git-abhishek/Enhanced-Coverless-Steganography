@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from . import cache, paper_refs, tracking
-from .attacks import EXTENDED_ORDER, NO_ATTACK, TABLE_IX_ORDER
+from .attacks import EXTENDED_ORDER, EXTREME2, NO_ATTACK, TABLE_IX_ORDER
 from .data import discover_images, expected_count
 from .evaluate import (
     attack_group_means,
@@ -96,7 +96,7 @@ def evaluate_checks(config, index, label_counts, capacity, capacity_checks, summ
     table = summary.set_index("attack")
     add(
         "all_attacks_present",
-        list(summary["attack"]) == [NO_ATTACK, *ordered_attacks(config.extended_attacks)],
+        list(summary["attack"]) == [NO_ATTACK, *ordered_attacks(config.extended_attacks, config.extreme2_attacks)],
         f"{len(summary) - 1} attacks plus no-attack control",
     )
     no_attack_acc = float(table.loc[NO_ATTACK, "acc_percent"])
@@ -152,14 +152,17 @@ def prepare_phase3(config, ids, image_paths, index: ImageIndex, paths: Paths, lo
     return info
 
 
-def ordered_attacks(extended: bool = False) -> list[str]:
+def ordered_attacks(extended: bool = False, extreme2: bool = False) -> list[str]:
     """Table IX order, which is also the order attacks are run in.
 
-    When *extended* is True, the 20 combined, heavy and extreme attacks are appended.
+    When *extended* is True, the 20 combined, heavy and extreme attacks are appended;
+    when *extreme2* is True, the 12 Extreme II attacks come last.
     """
     result = list(TABLE_IX_ORDER)
     if extended:
         result.extend(EXTENDED_ORDER)
+    if extreme2:
+        result.extend(EXTREME2)
     return result
 
 
@@ -270,6 +273,8 @@ def run_baseline(config, paths: Paths, label: str = "", allow_dirty: bool = Fals
             f"extreme: {means.get('mean_acc_extreme', '-')}%")
     else:
         log(f"[run] Mean ACC over 22 attacks: {means['mean_acc_22_attacks']}%")
+    if "mean_acc_extreme2" in means:
+        log(f"[run] Extreme II (12 breaking-point attacks, reported separately): {means['mean_acc_extreme2']}%")
     log(f"[run] Status: {'OFFICIAL' if official else 'NOT OFFICIAL'}")
     log(f"[run] Saved: {run_folder}")
     return run_folder

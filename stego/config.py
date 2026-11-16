@@ -46,6 +46,7 @@ class Config:
     retrieval_top_k: int = 10  # sscd_align: SSCD shortlist that alignment re-ranks
     usable_threshold: float = 0.0  # 0 = off; else share of simulated attacks an image must survive to be sent
     extended_attacks: bool = False  # adds 20 tougher attacks (6 combined + 6 heavy + 8 extreme): 42 in total
+    extreme2_attacks: bool = False  # adds the 12 Extreme II breaking-point attacks, after all others
 
     def __post_init__(self):
         if self.dataset not in DATASETS:
@@ -96,6 +97,8 @@ class Config:
             tag += f"_usable{self.usable_threshold:g}"
         if self.extended_attacks:
             tag += "_ext"
+        if self.extreme2_attacks:
+            tag += "_x2"
         return tag
 
     @property
