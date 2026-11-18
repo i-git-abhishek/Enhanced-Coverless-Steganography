@@ -83,9 +83,26 @@ def run_extraction(
     read_dirs: list[Path],
     batch_size: int = 1,
     limit: int = 0,
+    shard: int = 0,
+    shards: int = 1,
+    max_hours: float = 0.0,
 ) -> Path | None:
-    """Runs or resumes extraction. With limit > 0, it only prints a preview."""
+    """Runs or resumes extraction. With limit > 0, it only prints a preview.
+
+    With shards > 1, this process only handles chunks whose index % shards == shard, so
+    one process per GPU can share the work; a later run with shards == 1 finds every
+    chunk done and marks the cache complete. With max_hours > 0, no new chunk is started
+    once that much time has passed, so a Kaggle version can finish and save its output;
+    running again resumes from the first missing chunk.
+    """
+    import time
+
     import torch
+
+    started = time.monotonic()
+    if shards < 1 or not 0 <= shard < shards:
+        raise ValueError(f"shard must be in 0..{shards - 1}, got {shard}")
+    tag = f"[extract] shard {shard}/{shards}:" if shards > 1 else "[extract]"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[extract] device: {device}")
@@ -99,9 +116,8 @@ def run_extraction(
             print(f"[extract] Finished extraction already exists: {existing}")
             return existing
 
-    models = _load_models(device)
-
     if limit > 0:
+        models = _load_models(device)
         preview_ids = ids[:limit]
         records, features = _process_batch([paths[i] for i in preview_ids], preview_ids, models, device)
         for record in records:
@@ -114,10 +130,15 @@ def run_extraction(
     folder = Path(cache_dir) / key
     folder.mkdir(parents=True, exist_ok=True)
     total_chunks = (len(ids) + cache.CHUNK_SIZE - 1) // cache.CHUNK_SIZE
-    for chunk_index in range(total_chunks):
-        if cache.chunk_is_complete(folder, chunk_index):
-            print(f"[extract] chunk {chunk_index + 1}/{total_chunks} already done")
-            continue
+    mine = [c for c in range(total_chunks) if c % shards == shard]
+    todo = [c for c in mine if not cache.chunk_is_complete(folder, c)]
+    print(f"{tag} {len(mine) - len(todo)} of {len(mine)} chunks already done, {len(todo)} to go", flush=True)
+    models = _load_models(device) if todo else None
+    for chunk_index in todo:
+        if max_hours > 0 and time.monotonic() - started > max_hours * 3600:
+            print(f"{tag} time budget of {max_hours} h reached before chunk {chunk_index + 1}; run again to resume",
+                  flush=True)
+            break
         start = chunk_index * cache.CHUNK_SIZE
         chunk_ids = ids[start : start + cache.CHUNK_SIZE]
         records: list[dict] = []
@@ -130,7 +151,16 @@ def run_extraction(
             records.extend(batch_records)
             vectors.append(batch_features)
         cache.write_chunk(folder, chunk_index, records, np.concatenate(vectors, axis=0))
-        print(f"[extract] chunk {chunk_index + 1}/{total_chunks} saved", flush=True)
+        print(f"{tag} chunk {chunk_index + 1}/{total_chunks} saved", flush=True)
+
+    missing = [c for c in range(total_chunks) if not cache.chunk_is_complete(folder, c)]
+    if missing:
+        print(f"{tag} INCOMPLETE: {len(missing)} of {total_chunks} chunks still missing. Run extract again to resume.",
+              flush=True)
+        return None
+    if shards > 1:
+        print(f"{tag} all chunks present; run extract once without --shard to mark the cache complete", flush=True)
+        return None
 
     import torchvision
 

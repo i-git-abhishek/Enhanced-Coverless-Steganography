@@ -399,3 +399,113 @@ def test_extreme2_attacks_are_separate_and_repeatable():
 
 def test_extreme2_changes_the_run_tag():
     assert build_config({"dataset": "voc2012", "extended_attacks": True, "extreme2_attacks": True}).tag.endswith("_ext_x2")
+
+
+def _fake_extraction_env(monkeypatch, tmp_path, n_images=7, chunk_size=2):
+    """Stand-ins for torch, torchvision and the two models, so chunk logic runs without a GPU."""
+    import sys
+    import types
+
+    from stego import cache, extract
+
+    torch = types.ModuleType("torch")
+    torch.__version__ = "fake"
+    torch.device = lambda name: types.SimpleNamespace(type=name)
+    torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+    torchvision = types.ModuleType("torchvision")
+    torchvision.__version__ = "fake"
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setitem(sys.modules, "torchvision", torchvision)
+    monkeypatch.setattr(cache, "CHUNK_SIZE", chunk_size)
+    loads = []
+    monkeypatch.setattr(extract, "_load_models", lambda device: loads.append(1) or object())
+    monkeypatch.setattr(
+        extract,
+        "_process_batch",
+        lambda paths, ids, models, device: ([{"id": i, "objects": []} for i in ids], np.zeros((len(ids), 2048))),
+    )
+    ids = [f"img_{i:03d}.jpg" for i in range(n_images)]
+    paths = {i: tmp_path / i for i in ids}
+    config = types.SimpleNamespace(dataset="voc2012", conf_threshold=0.9)
+    return extract, cache, config, ids, paths, loads
+
+
+def test_extraction_shards_split_chunks_and_a_final_pass_marks_complete(monkeypatch, tmp_path):
+    extract, cache, config, ids, paths, loads = _fake_extraction_env(monkeypatch, tmp_path)
+    folder = tmp_path / "cache" / cache.extraction_key(config.dataset, ids)
+    assert extract.run_extraction(config, ids, paths, tmp_path / "cache", [], shard=0, shards=2) is None
+    assert [cache.chunk_is_complete(folder, c) for c in range(4)] == [True, False, True, False]
+    assert extract.run_extraction(config, ids, paths, tmp_path / "cache", [], shard=1, shards=2) is None
+    assert all(cache.chunk_is_complete(folder, c) for c in range(4))
+    assert not (folder / "COMPLETE").exists()  # a shard never marks the cache complete
+    loads.clear()
+    assert extract.run_extraction(config, ids, paths, tmp_path / "cache", []) == folder
+    assert (folder / "COMPLETE").exists()
+    assert loads == []  # nothing left to do, so the models are not loaded
+    loaded = cache.load_extraction(ids, config.dataset, tmp_path / "cache", [])
+    assert loaded.ids == ids and loaded.features.shape == (7, 2048)
+
+
+def test_extraction_time_budget_stops_cleanly_and_resumes(monkeypatch, tmp_path):
+    extract, cache, config, ids, paths, loads = _fake_extraction_env(monkeypatch, tmp_path)
+    folder = tmp_path / "cache" / cache.extraction_key(config.dataset, ids)
+    assert extract.run_extraction(config, ids, paths, tmp_path / "cache", [], max_hours=1e-12) is None
+    assert not any(cache.chunk_is_complete(folder, c) for c in range(4))
+    assert not (folder / "COMPLETE").exists()
+    assert extract.run_extraction(config, ids, paths, tmp_path / "cache", []) == folder
+    assert (folder / "COMPLETE").exists()
+
+
+def test_extraction_rejects_a_bad_shard(monkeypatch, tmp_path):
+    extract, cache, config, ids, paths, loads = _fake_extraction_env(monkeypatch, tmp_path)
+    with pytest.raises(ValueError):
+        extract.run_extraction(config, ids, paths, tmp_path / "cache", [], shard=2, shards=2)
+
+
+def test_gpu_workers_get_the_same_command_without_gpus():
+    import importlib.util
+
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("run_cli", Path(__file__).resolve().parents[1] / "run.py")
+    run_cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_cli)
+    argv = ["extract", "--config", "configs/coco2014.yaml", "--gpus", "2", "--max-hours", "10.5", "--gpus=2"]
+    assert run_cli._without_gpus(argv) == ["extract", "--config", "configs/coco2014.yaml", "--max-hours", "10.5"]
+
+
+def test_gpu_launcher_starts_one_worker_per_gpu_then_completes(monkeypatch, tmp_path):
+    import importlib.util
+    import subprocess
+    import sys
+    import types
+    from pathlib import Path
+
+    extract, cache, config, ids, paths, loads = _fake_extraction_env(monkeypatch, tmp_path)
+    spec = importlib.util.spec_from_file_location("run_cli", Path(__file__).resolve().parents[1] / "run.py")
+    run_cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_cli)
+    started = []
+
+    class FakeWorker:
+        def __init__(self, command, env):
+            started.append((command, env["CUDA_VISIBLE_DEVICES"], env["OMP_NUM_THREADS"]))
+
+        def wait(self):
+            return 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(subprocess, "Popen", FakeWorker)
+    monkeypatch.setattr(sys, "argv", ["run.py", "extract", "--config", "x.yaml", "--gpus", "2"])
+    args = types.SimpleNamespace(gpus=2, batch_size=1, max_hours=0.0)
+    paths_obj = types.SimpleNamespace(cache_dir=tmp_path / "cache", read_dirs=[])
+    assert run_cli.extract_on_gpus(args, config, ids, paths, paths_obj) == 0
+    assert [(c[-4:], gpu) for c, gpu, _ in started] == [
+        (["--shard", "0", "--shards", "2"], "0"),
+        (["--shard", "1", "--shards", "2"], "1"),
+    ]
+    assert all("--gpus" not in c for c, _, _ in started)
+    folder = tmp_path / "cache" / cache.extraction_key(config.dataset, ids)
+    assert (folder / "COMPLETE").exists()  # the final pass finished what the (fake) workers left

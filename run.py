@@ -48,7 +48,69 @@ def command_extract(args) -> int:
     paths = paths_from(args)
     ids, image_paths = discover_images(config, paths.data_root)
     print(f"[extract] {len(ids)} images")
-    run_extraction(config, ids, image_paths, paths.cache_dir, paths.read_dirs, args.batch_size, args.limit)
+    if args.gpus > 1 and args.limit <= 0:
+        return extract_on_gpus(args, config, ids, image_paths, paths)
+    run_extraction(config, ids, image_paths, paths.cache_dir, paths.read_dirs, args.batch_size, args.limit,
+                   args.shard, args.shards, args.max_hours)
+    return 0
+
+
+def _without_gpus(argv: list[str]) -> list[str]:
+    """The command line of this run, minus --gpus (both "--gpus 2" and "--gpus=2")."""
+    result, skip = [], False
+    for item in argv:
+        if skip:
+            skip = False
+        elif item == "--gpus":
+            skip = True
+        elif not item.startswith("--gpus="):
+            result.append(item)
+    return result
+
+
+def extract_on_gpus(args, config, ids, image_paths, paths) -> int:
+    """One worker per GPU on alternate chunks, then a final pass that marks the cache complete."""
+    import os
+    import signal
+    import subprocess
+    import time
+
+    from stego.extract import run_extraction
+
+    started = time.monotonic()
+    base = [sys.executable, "-u", str(REPO_ROOT / "run.py"), *_without_gpus(sys.argv[1:])]
+    workers = []
+
+    def stop_workers(*_):
+        for worker in workers:
+            if worker.poll() is None:
+                worker.terminate()
+        raise SystemExit(1)
+
+    previous = signal.signal(signal.SIGTERM, stop_workers)
+    try:
+        for gpu in range(args.gpus):
+            env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu))
+            # Kaggle has 4 CPU cores; give each worker its share so they don't compete.
+            env.setdefault("OMP_NUM_THREADS", str(max(1, (os.cpu_count() or 2) // args.gpus)))
+            command = [*base, "--shard", str(gpu), "--shards", str(args.gpus)]
+            print(f"[extract] starting worker {gpu} on GPU {gpu}", flush=True)
+            workers.append(subprocess.Popen(command, env=env))
+        codes = [worker.wait() for worker in workers]
+    except BaseException:
+        stop_workers()
+        raise
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+    print(f"[extract] workers finished with exit codes {codes}", flush=True)
+    remaining = 0.0
+    if args.max_hours > 0:
+        remaining = args.max_hours - (time.monotonic() - started) / 3600
+        if remaining <= 0:
+            print("[extract] time budget used; run extract again to finish and mark the cache complete")
+            return 0
+    # Finishes any chunk a worker left (for example after a crash) and marks the cache complete.
+    run_extraction(config, ids, image_paths, paths.cache_dir, paths.read_dirs, args.batch_size, 0, 0, 1, remaining)
     return 0
 
 
@@ -222,6 +284,11 @@ def main() -> int:
     add_common(sub)
     sub.add_argument("--batch-size", type=int, default=1, help="Keep at 1: batching pads images and can change detections")
     sub.add_argument("--limit", type=int, default=0, help="Preview this many images and save nothing")
+    sub.add_argument("--gpus", type=int, default=1, help="Run one worker per GPU on alternate chunks (Kaggle T4 x2: 2)")
+    sub.add_argument("--shard", type=int, default=0, help="Used by --gpus: which share of the chunks this process runs")
+    sub.add_argument("--shards", type=int, default=1, help="Used by --gpus: how many processes share the chunks")
+    sub.add_argument("--max-hours", type=float, default=0.0,
+                     help="Start no new chunk after this many hours, so the run ends cleanly (0 = no limit)")
     sub.set_defaults(func=command_extract)
 
     sub = commands.add_parser("verify-detections", help="Re-run the detector on a sample and compare with the cache")
