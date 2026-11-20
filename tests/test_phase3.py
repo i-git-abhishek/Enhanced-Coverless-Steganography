@@ -248,8 +248,25 @@ def test_ssim_candidate_cache_is_uint8_and_gives_identical_scores(synthetic):
     expected = to_comparison_gray(read_image(image_paths[ids[member]]), 256)
     assert np.array_equal(big._candidate(member), expected)
     assert np.array_equal(big._candidate(member), expected)  # second call comes from the cache
-    assert big._cache[member].dtype == np.uint8
+    assert big._cache[str(image_paths[ids[member]])].dtype == np.uint8
     query = cv2.GaussianBlur(read_image(image_paths[ids[member]]), (5, 5), 0)
     for _ in range(2):
         a, b = big.retrieve(query, cluster), tiny.retrieve(query, cluster)
         assert (a.image_index, a.best_score, a.second_score) == (b.image_index, b.best_score, b.second_score)
+
+
+def test_ssim_candidates_are_read_once_per_process(synthetic, monkeypatch):
+    import stego.recovery as recovery
+
+    root, _, ids, image_paths = synthetic
+    index = _index(root, ids)
+    recovery._SHARED_CANDIDATES.clear()
+    reads = []
+    real_read = recovery.read_image
+    monkeypatch.setattr(recovery, "read_image", lambda path: reads.append(path) or real_read(path))
+    first = recovery.Retriever(index, image_paths, "global", 256)
+    member = int(next(iter(index.cluster_members.values()))[0])
+    a = first._candidate(member)
+    second = recovery.Retriever(index, image_paths, "global", 256)  # the next run of a sweep
+    b = second._candidate(member)
+    assert len(reads) == 1 and np.array_equal(a, b)

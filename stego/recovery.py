@@ -62,27 +62,33 @@ class Retrieved:
     second_score: float
 
 
+_SHARED_CANDIDATES: dict[int, OrderedDict[str, np.ndarray]] = {}
+
+
 class Retriever:
     # Candidates are cached as uint8 (64 KB at 256 x 256) and converted on use, which gives the same
     # float64 values as converting first. 150,000 of them use less memory than 20,000 float64 images,
     # so a large dataset such as COCO (k = 1024) does not re-read its candidates for every attack.
+    # The cache is keyed by file and comparison size and shared by every Retriever in the process,
+    # so the runs of one sweep (n, M, seed) read each image from disk only once.
     def __init__(self, index: ImageIndex, paths: dict[str, Path], mode: str, size: int, cache_size: int = 150000):
         self.index = index
         self.paths = paths
         self.size = size
         self.score = equation_2 if mode == "global" else windowed_ssim
         self.cache_size = cache_size
-        self._cache: OrderedDict[int, np.ndarray] = OrderedDict()
+        self._cache: OrderedDict[str, np.ndarray] = _SHARED_CANDIDATES.setdefault(size, OrderedDict())
 
     def _candidate(self, image_index: int) -> np.ndarray:
-        cached = self._cache.get(image_index)
+        path = self.paths[self.index.ids[image_index]]
+        key = str(path)
+        cached = self._cache.get(key)
         if cached is not None:
-            self._cache.move_to_end(image_index)
+            self._cache.move_to_end(key)
             return cached.astype(np.float64)
-        image = read_image(self.paths[self.index.ids[image_index]])
-        gray = comparison_gray_u8(image, self.size)
-        self._cache[image_index] = gray
-        if len(self._cache) > self.cache_size:
+        gray = comparison_gray_u8(read_image(path), self.size)
+        self._cache[key] = gray
+        while len(self._cache) > self.cache_size:
             self._cache.popitem(last=False)
         return gray.astype(np.float64)
 
