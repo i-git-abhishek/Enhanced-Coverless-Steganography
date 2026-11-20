@@ -128,7 +128,7 @@ class DescriptorRetriever:
 
     def __init__(self, index: ImageIndex, paths: dict[str, Path], descriptors: np.ndarray, model, mode: str,
                  top_k: int, size: int, search: np.ndarray | None = None, cache_size: int = 20000):
-        if mode not in ("sscd", "sscd_align"):
+        if mode not in ("sscd", "sscd_align", "descriptor"):
             raise ValueError(f"Unknown descriptor retrieval mode {mode!r}")
         self.index = index
         self.paths = paths
@@ -165,7 +165,7 @@ class DescriptorRetriever:
     def retrieve(self, received_bgr: np.ndarray, cluster: int | None = None) -> Retrieved:
         """`cluster` is ignored: these modes search the whole database."""
         cosine = self.similarities(received_bgr)
-        if self.mode == "sscd" or len(cosine) == 1:
+        if self.mode in ("sscd", "descriptor") or len(cosine) == 1:
             order = np.argsort(-cosine, kind="stable")[:2]
             second = float(cosine[order[1]]) if len(order) > 1 else -np.inf
             return Retrieved(int(self.search[order[0]]), float(cosine[order[0]]), second)
@@ -183,10 +183,31 @@ class DescriptorRetriever:
         return Retrieved(best, float(scores[ranking[0]]), float(second))
 
 
+class ClusterDescriptorRetriever:
+    """Ablation: the paper's search space (the sent cluster) scored with a descriptor instead of SSIM."""
+
+    def __init__(self, index: ImageIndex, descriptors: np.ndarray, model):
+        self.index = index
+        self.model = model
+        self.descriptors = np.ascontiguousarray(descriptors, dtype=np.float32)
+
+    def retrieve(self, received_bgr: np.ndarray, cluster: int) -> Retrieved:
+        members = self.index.cluster_members.get(cluster)
+        if members is None or members.size == 0:
+            raise RuntimeError(f"Cluster C{cluster} has no images")
+        query = self.model.describe([received_bgr])[0]
+        cosine = self.descriptors[members] @ query
+        order = np.argsort(-cosine, kind="stable")[:2]
+        second = float(cosine[order[1]]) if len(order) > 1 else -np.inf
+        return Retrieved(int(members[order[0]]), float(cosine[order[0]]), second)
+
+
 def make_retriever(config, index: ImageIndex, paths: dict[str, Path], descriptors=None, model=None, search=None):
     if config.retrieval == "cluster_ssim":
         return Retriever(index, paths, config.ssim_mode, config.ssim_size)
     if descriptors is None or model is None:
         raise RuntimeError(f"retrieval={config.retrieval} needs descriptors and a descriptor model")
+    if config.retrieval == "cluster_descriptor":
+        return ClusterDescriptorRetriever(index, descriptors, model)
     return DescriptorRetriever(index, paths, descriptors, model, config.retrieval, config.retrieval_top_k,
                                config.ssim_size, search)

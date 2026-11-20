@@ -108,6 +108,13 @@ def load_summaries(runs_dir: Path) -> list[tuple[Path, dict]]:
     return summaries
 
 
+def _retrieval_label(summary: dict, config: dict) -> str:
+    retrieval = summary.get("retrieval", config.get("retrieval", "cluster_ssim"))
+    if retrieval in ("descriptor", "cluster_descriptor"):
+        return f"{retrieval} ({summary.get('descriptor') or config.get('descriptor')})"
+    return retrieval
+
+
 def build_dashboard(runs_dir: Path, output: Path) -> Path:
     """Rebuilds the dashboard. Every number comes from a run folder."""
     summaries = load_summaries(runs_dir)
@@ -124,7 +131,7 @@ def build_dashboard(runs_dir: Path, output: Path) -> Path:
                 "Dataset": config["dataset"],
                 "n": config["n"],
                 "M": config["M"],
-                "Retrieval": summary.get("retrieval", config.get("retrieval", "cluster_ssim")),
+                "Retrieval": _retrieval_label(summary, config),
                 "Usable threshold": config.get("usable_threshold", 0.0) or "-",
                 "Images searched": summary.get("images_searched"),
                 "Cluster bits": summary.get("cluster_bits_sent"),

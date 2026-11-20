@@ -11,7 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from stego import cache
-from stego.config import ConfigError, build_config, load_config
+from stego.config import DESCRIPTORS, ConfigError, build_config, load_config
 from stego.data import DataError, discover_images
 from stego.mapping import MappingError
 from stego.pipeline import resolve_paths, run_baseline
@@ -163,6 +163,46 @@ def command_ordering(args) -> int:
     return 0
 
 
+ABLATION_DESCRIPTORS = ("resnet101_imagenet", "clip_vit_b16", "dinov2_vitb14", "sscd_disc_mixup")
+ABLATION_MODES = ("cluster_descriptor", "descriptor")
+
+
+def command_ablation(args) -> int:
+    """WP2: every descriptor, searched inside the sent cluster and over the whole library.
+
+    The paper's cell (SSIM inside the cluster) is the ordinary baseline run. All runs share
+    one process, so images, clusters and the descriptor caches are built once.
+    """
+    from stego.descriptors import run_descriptor_extraction
+
+    base = load_config(args.config, args.set)
+    paths = paths_from(args)
+    ids, image_paths = discover_images(base, paths.data_root)
+    failures = []
+    for descriptor in args.descriptors:
+        print(f"\n===== descriptor = {descriptor} =====", flush=True)
+        try:
+            described = build_config({**base.to_dict(), "descriptor": descriptor})
+            run_descriptor_extraction(described, ids, image_paths, paths.cache_dir, paths.read_dirs, args.batch_size)
+        except Exception as error:  # one model failing must not stop the others
+            failures.append(f"{descriptor}: descriptors: {error}")
+            print(f"[ablation] FAILED {descriptor} descriptors: {error}", flush=True)
+            continue
+        for mode in args.modes:
+            config = build_config({**base.to_dict(), "descriptor": descriptor, "retrieval": mode})
+            print(f"\n===== {config.tag} =====", flush=True)
+            try:
+                run_baseline(config, paths, args.label, args.allow_dirty)
+            except Exception as error:
+                failures.append(f"{config.tag}: {error}")
+                print(f"[ablation] FAILED {config.tag}: {error}", flush=True)
+    if failures:
+        print("\n[ablation] Some settings failed:\n" + "\n".join(failures))
+        return 1
+    print("\n[ablation] All settings finished")
+    return 0
+
+
 def command_descriptors(args) -> int:
     from stego.descriptors import run_descriptor_extraction
 
@@ -244,6 +284,9 @@ def command_smoke(args) -> int:
             # Phase 3 path with the test-only descriptor (no PyTorch needed).
             {"n": 6, "M": 4, "retrieval": "sscd", "descriptor": "pixels"},
             {"n": 6, "M": 4, "retrieval": "sscd_align", "descriptor": "pixels", "usable_threshold": 0.5},
+            # Descriptor ablation: inside the sent cluster, and over the whole library.
+            {"n": 6, "M": 4, "retrieval": "cluster_descriptor", "descriptor": "pixels"},
+            {"n": 6, "M": 4, "retrieval": "descriptor", "descriptor": "pixels"},
         ]
         paths = resolve_paths(str(data_root), str(root / "cache"), str(root / "experiments" / "runs"), [])
         paths.read_dirs = []
@@ -310,6 +353,15 @@ def main() -> int:
     sub.add_argument("--label", default="")
     sub.add_argument("--allow-dirty", action="store_true")
     sub.set_defaults(func=command_sweep)
+
+    sub = commands.add_parser("ablation", help="WP2: each descriptor inside the sent cluster and over the whole library")
+    add_common(sub)
+    sub.add_argument("--descriptors", nargs="+", default=list(ABLATION_DESCRIPTORS), choices=list(DESCRIPTORS))
+    sub.add_argument("--modes", nargs="+", default=list(ABLATION_MODES), choices=list(ABLATION_MODES))
+    sub.add_argument("--batch-size", type=int, default=32)
+    sub.add_argument("--label", default="")
+    sub.add_argument("--allow-dirty", action="store_true")
+    sub.set_defaults(func=command_ablation)
 
     sub = commands.add_parser("ordering", help="Phase 2: compare ordering schemes on the cached detections (CPU)")
     add_common(sub)

@@ -270,3 +270,74 @@ def test_ssim_candidates_are_read_once_per_process(synthetic, monkeypatch):
     second = recovery.Retriever(index, image_paths, "global", 256)  # the next run of a sweep
     b = second._candidate(member)
     assert len(reads) == 1 and np.array_equal(a, b)
+
+
+def test_ablation_modes_tags_and_cluster_bits():
+    from stego.config import ConfigError, build_config
+
+    whole = build_config({"dataset": "synthetic", "retrieval": "descriptor", "descriptor": "clip_vit_b16"})
+    inside = build_config({"dataset": "synthetic", "retrieval": "cluster_descriptor", "descriptor": "dinov2_vitb14",
+                           "extended_attacks": True})
+    assert whole.tag == "synthetic_n6_M4_seed0_desc-clip_vit_b16"
+    assert inside.tag == "synthetic_n6_M4_seed0_cdesc-dinov2_vitb14_ext"
+    assert inside.uses_clusters and inside.uses_descriptors
+    assert not whole.uses_clusters and whole.uses_descriptors
+    old = build_config({"dataset": "synthetic", "retrieval": "sscd"})
+    assert old.tag == "synthetic_n6_M4_seed0_sscd"  # existing run names do not change
+    with pytest.raises(ConfigError):
+        build_config({"dataset": "synthetic", "retrieval": "descriptor", "usable_threshold": 0.5})
+
+
+def test_cluster_descriptor_searches_only_the_sent_cluster(synthetic):
+    from stego.descriptors import DescriptorModel
+    from stego.recovery import ClusterDescriptorRetriever
+
+    root, _, ids, image_paths = synthetic
+    extraction = cache.load_extraction(ids, "synthetic", root / "cache", [])
+    index = build_index(ids, extraction.objects, (np.arange(len(ids)) % 3).astype(np.int32), 6, 4, 0.9)
+    model = DescriptorModel("pixels")
+    vectors = model.describe([read_image(image_paths[i]) for i in ids])
+    cluster, members = next((c, m) for c, m in index.cluster_members.items() if m.size > 1)
+    retriever = ClusterDescriptorRetriever(index, vectors, model)
+    target = int(members[-1])
+    found = retriever.retrieve(read_image(image_paths[ids[target]]), cluster)
+    assert found.image_index == target and found.best_score == pytest.approx(1.0, abs=1e-5)
+    other = next(c for c, m in index.cluster_members.items() if c != cluster and m.size)
+    assert retriever.retrieve(read_image(image_paths[ids[target]]), other).image_index in set(
+        int(x) for x in index.cluster_members[other])
+
+
+def test_prepare_batch_resizes_whole_image_and_normalises():
+    from stego.descriptors import IMAGENET_MEAN, IMAGENET_STD, prepare_batch
+
+    image = np.zeros((100, 300, 3), np.uint8)
+    image[:, :, 2] = 255  # red in BGR
+    batch = prepare_batch([image, image], 224, IMAGENET_MEAN, IMAGENET_STD)
+    assert batch.shape == (2, 3, 224, 224) and batch.dtype == np.float32
+    assert np.allclose(batch[0, 0], (1 - 0.485) / 0.229, atol=1e-5)  # R channel first, whole image kept
+    assert np.allclose(batch[0, 1], (0 - 0.456) / 0.224, atol=1e-5)
+
+
+def test_ablation_command_runs_both_search_modes(synthetic, tmp_path):
+    import argparse
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("run_cli", Path(__file__).resolve().parents[1] / "run.py")
+    run_cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_cli)
+    root, data_root, _, _ = synthetic
+    config_file = tmp_path / "synthetic.yaml"
+    config_file.write_text("dataset: synthetic\nk: 8\ncapacity_bytes: [10]\ncapacity_trials: 1\n"
+                           "robustness_trials: 1\nrobustness_segments: 8\nbootstrap_samples: 20\n")
+    runs = tmp_path / "runs"
+    args = argparse.Namespace(config=str(config_file), set=[], data_root=str(data_root), cache_dir=str(root / "cache"),
+                              cache_read=[], runs_dir=str(runs), descriptors=["pixels"],
+                              modes=["cluster_descriptor", "descriptor"], batch_size=8, label="", allow_dirty=True)
+    assert run_cli.command_ablation(args) == 0
+    summaries = {p.parent.name.split("__")[0]: json.loads(p.read_text()) for p in runs.glob("*/summary.json")}
+    inside = summaries["synthetic_n6_M4_seed0_cdesc-pixels"]
+    whole = summaries["synthetic_n6_M4_seed0_desc-pixels"]
+    assert inside["cluster_bits_sent"] == 3.0 and whole["cluster_bits_sent"] == 0.0
+    assert inside["descriptor"] == whole["descriptor"] == "pixels"
+    assert inside["means"]["no_attack_acc"] == whole["means"]["no_attack_acc"] == 100.0

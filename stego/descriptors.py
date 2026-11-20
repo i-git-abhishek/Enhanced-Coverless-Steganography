@@ -28,18 +28,39 @@ from . import cache
 
 FORMAT_VERSION = 1
 DESCRIPTOR_CHUNK = 2000
+# Every model sees the whole image resized (not cropped) to a square, so a crop attack
+# is not undone by a centre crop in the preprocessing.
 MODELS = {
     "sscd_disc_mixup": {
+        "kind": "sscd",
         "url": "https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_mixup.torchscript.pt",
         "file": "sscd_disc_mixup.torchscript.pt",
         "dim": 512,
+        "size": 320,
         "input": "skew_320",  # resize to 320 x 320, as in the SSCD README
     },
-    "pixels": {"dim": 256, "input": "gray_16"},
+    # Descriptor ablation (WP2): general-purpose features, each trained for a different job.
+    "resnet101_imagenet": {"kind": "torchvision", "dim": 2048, "size": 224, "input": "skew_224"},  # classification
+    "clip_vit_b16": {"kind": "timm", "timm": "vit_base_patch16_clip_224.openai", "dim": None, "size": 224,
+                     "input": "skew_224"},  # image-text matching; image embedding after CLIP's projection
+    "dinov2_vitb14": {"kind": "timm", "timm": "vit_base_patch14_dinov2.lvd142m", "dim": 768, "size": 224,
+                      "input": "skew_224", "pool": True},  # self-supervised; CLS token
+    "pixels": {"kind": "pixels", "dim": 256, "input": "gray_16"},
 }
 SSCD_SIZE = 320
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
+
+
+def prepare_batch(images_bgr: list[np.ndarray], size: int, mean: np.ndarray, std: np.ndarray) -> np.ndarray:
+    """BGR images -> float32 N x 3 x size x size, resized to a square and normalised."""
+    batch = []
+    for image in images_bgr:
+        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        method = cv2.INTER_AREA if min(rgb.shape[:2]) > size else cv2.INTER_LINEAR
+        rgb = cv2.resize(rgb, (size, size), interpolation=method).astype(np.float32) / 255.0
+        batch.append(((rgb - mean) / std).transpose(2, 0, 1))
+    return np.stack(batch).astype(np.float32)
 
 
 class DescriptorError(RuntimeError):
@@ -66,20 +87,68 @@ class DescriptorModel:
         if name not in MODELS:
             raise DescriptorError(f"Unknown descriptor {name!r}. Choose one of {sorted(MODELS)}")
         self.name = name
-        self.dim = MODELS[name]["dim"]
+        self.info = MODELS[name]
+        self.dim = self.info["dim"]
+        self.size = self.info.get("size", SSCD_SIZE)
+        self.mean, self.std = IMAGENET_MEAN, IMAGENET_STD
         self._model = None
         self._device = None
-        if name != "pixels":
+        kind = self.info["kind"]
+        if kind == "sscd":
             self._load_sscd(weights, Path(weights_dir))
+        elif kind == "torchvision":
+            self._load_torchvision()
+        elif kind == "timm":
+            self._load_timm()
+        if kind != "pixels":
+            # One real forward pass, so a wrong model or output shape fails here, not hours later.
+            probe = self.describe([np.full((64, 80, 3), 128, np.uint8)])
+            if self.dim is None:
+                self.dim = int(probe.shape[1])
+            elif probe.shape[1] != self.dim:
+                raise DescriptorError(f"{name} gave {probe.shape[1]} numbers per image, expected {self.dim}")
 
-    def _load_sscd(self, weights, weights_dir: Path) -> None:
+    def _torch(self):
         try:
             import torch
         except ImportError as error:  # pragma: no cover - depends on the machine
-            raise DescriptorError("SSCD needs PyTorch. On Kaggle it is already installed.") from error
-        path = Path(weights) if weights else self._find_weights(weights_dir)
+            raise DescriptorError(f"{self.name} needs PyTorch. On Kaggle it is already installed.") from error
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        return torch
+
+    def _load_sscd(self, weights, weights_dir: Path) -> None:
+        torch = self._torch()
+        path = Path(weights) if weights else self._find_weights(weights_dir)
         self._model = torch.jit.load(str(path), map_location=self._device).eval()
+
+    def _load_torchvision(self) -> None:  # pragma: no cover - needs torchvision and the network
+        torch = self._torch()
+        import torchvision
+
+        model = torchvision.models.resnet101(weights=torchvision.models.ResNet101_Weights.IMAGENET1K_V1)
+        model.fc = torch.nn.Identity()  # 2048-number global average pool
+        self._model = model.to(self._device).eval()
+
+    def _load_timm(self) -> None:  # pragma: no cover - needs timm and the network
+        self._torch()
+        try:
+            import timm
+            from timm.data import resolve_data_config
+        except ImportError as error:
+            raise DescriptorError(f"{self.name} needs timm: run  pip install timm  (Internet on)") from error
+        options = {"num_classes": 0} if self.info.get("pool") else {}
+        if self.info["timm"].startswith("vit_base_patch14_dinov2"):
+            options["img_size"] = self.size  # DINOv2 is trained at 518; its position embedding is resampled
+        try:
+            model = timm.create_model(self.info["timm"], pretrained=True, **options)
+        except Exception as error:
+            raise DescriptorError(
+                f"Could not load {self.info['timm']} from timm. Turn on Internet in the notebook settings."
+            ) from error
+        config = resolve_data_config({}, model=model)
+        self.mean = np.asarray(config["mean"], np.float32)
+        self.std = np.asarray(config["std"], np.float32)
+        self._model = model.to(self._device).eval()
 
     def _find_weights(self, weights_dir: Path) -> Path:
         info = MODELS[self.name]
@@ -123,17 +192,10 @@ class DescriptorModel:
             return _normalise(np.stack(rows))
         import torch
 
-        batch = []
-        for image in images_bgr:
-            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            shrink = min(rgb.shape[:2]) > SSCD_SIZE
-            method = cv2.INTER_AREA if shrink else cv2.INTER_LINEAR
-            rgb = cv2.resize(rgb, (SSCD_SIZE, SSCD_SIZE), interpolation=method).astype(np.float32) / 255.0
-            batch.append(((rgb - IMAGENET_MEAN) / IMAGENET_STD).transpose(2, 0, 1))
-        tensor = torch.from_numpy(np.stack(batch)).to(self._device)
+        tensor = torch.from_numpy(prepare_batch(images_bgr, self.size, self.mean, self.std)).to(self._device)
         with torch.inference_mode():
             output = self._model(tensor).float().cpu().numpy()
-        return _normalise(output)
+        return _normalise(output.reshape(len(images_bgr), -1))
 
 
 def find_descriptors(key: str, cache_dir: Path, read_dirs: list[Path]) -> Path | None:
@@ -150,7 +212,8 @@ def load_descriptors(ids: list[str], dataset: str, model: str, cache_dir: Path, 
         )
     vectors = np.load(folder / "descriptors.npy")
     stored_ids = json.loads((folder / "ids.json").read_text(encoding="utf-8"))
-    if stored_ids != ids or vectors.shape != (len(ids), MODELS[model]["dim"]):
+    dim = MODELS[model]["dim"]
+    if stored_ids != ids or vectors.ndim != 2 or vectors.shape[0] != len(ids) or (dim and vectors.shape[1] != dim):
         raise DescriptorError(f"Cached descriptors do not match the dataset: {folder}")
     return vectors
 

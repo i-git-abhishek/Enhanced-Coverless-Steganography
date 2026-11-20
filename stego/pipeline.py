@@ -110,16 +110,21 @@ def evaluate_checks(config, index, label_counts, capacity, capacity_checks, summ
 def prepare_phase3(config, ids, image_paths, index: ImageIndex, paths: Paths, log=print) -> dict:
     """Loads descriptors and, if asked, runs the retrievability check and limits the sender to usable images."""
     searched = int(index.usable_images)
-    if config.uses_clusters:
+    if not config.uses_descriptors:
         return {"images_searched": searched, "bound_bits_per_image": round(float(np.log2(searched)), 3)}
     from .descriptors import DescriptorModel, load_descriptors
     from .retrievability import run_check, sendable_images, usable_mask, usable_report
 
     descriptors = load_descriptors(ids, config.dataset, config.descriptor, paths.cache_dir, paths.read_dirs)
     model = DescriptorModel(config.descriptor, weights_dir=Path(paths.cache_dir) / "weights")
+    info = {"descriptors": descriptors, "model": model}
+    if config.uses_clusters:
+        # cluster_descriptor: the receiver scores only the sent cluster, as in the paper.
+        info["images_searched"] = searched
+        info["bound_bits_per_image"] = round(float(np.log2(searched)), 3)
+        return info
     sendable = sendable_images(index)
     search = np.flatnonzero(sendable)
-    info = {"descriptors": descriptors, "model": model}
     if config.usable_threshold > 0:
         hits = run_check(config, ids, image_paths, descriptors, model, sendable, paths.cache_dir, paths.read_dirs, log)
         usable = usable_mask(hits, sendable, config.usable_threshold)
@@ -245,7 +250,7 @@ def run_baseline(config, paths: Paths, label: str = "", allow_dirty: bool = Fals
             "aux_bits_fixed": float(capacity["aux_bits_fixed"].iloc[0]),
             "aux_bits_tight": round(float(capacity["aux_bits_tight"].iloc[0]), 2),
             "retrieval": config.retrieval,
-            "descriptor": None if config.uses_clusters else config.descriptor,
+            "descriptor": config.descriptor if config.uses_descriptors else None,
             "cluster_bits_sent": round(float(np.log2(len(index.cluster_members))), 3)
             if len(index.cluster_members) > 1 else 0.0,
             "images_searched": phase3["images_searched"],

@@ -11,8 +11,10 @@ import yaml
 DATASETS = ("voc2007", "voc2012", "coco2014", "ade20k", "synthetic")
 SSIM_MODES = ("global", "windowed")
 CLUSTER_ALGORITHMS = ("kmeans", "minibatch")
-RETRIEVAL_MODES = ("cluster_ssim", "sscd", "sscd_align")  # Phase 3, Part B
-DESCRIPTORS = ("sscd_disc_mixup", "pixels")  # "pixels" is for tests only
+# Phase 3, Part B. "descriptor" searches every image with any descriptor (no cluster ID, like "sscd");
+# "cluster_descriptor" searches only the sent cluster, as the paper does, but scores with a descriptor.
+RETRIEVAL_MODES = ("cluster_ssim", "sscd", "sscd_align", "descriptor", "cluster_descriptor")
+DESCRIPTORS = ("sscd_disc_mixup", "resnet101_imagenet", "clip_vit_b16", "dinov2_vitb14", "pixels")  # pixels: tests only
 
 
 class ConfigError(ValueError):
@@ -65,7 +67,7 @@ class Config:
             raise ConfigError("retrieval_top_k must be at least 1")
         if not 0.0 <= self.usable_threshold <= 1.0:
             raise ConfigError("usable_threshold must be between 0 and 1")
-        if self.usable_threshold > 0 and self.retrieval == "cluster_ssim":
+        if self.usable_threshold > 0 and self.retrieval not in ("sscd", "sscd_align"):
             raise ConfigError("usable_threshold needs retrieval sscd or sscd_align (the check uses SSCD)")
         if not 1 <= self.n <= 8:
             raise ConfigError(f"n must be between 1 and 8, got {self.n}")
@@ -89,7 +91,11 @@ class Config:
     def tag(self) -> str:
         """Short name used in run folders."""
         tag = f"{self.dataset}_n{self.n}_M{self.M}_seed{self.seed}"
-        if self.retrieval != "cluster_ssim":
+        if self.retrieval == "descriptor":
+            tag += f"_desc-{self.descriptor}"
+        elif self.retrieval == "cluster_descriptor":
+            tag += f"_cdesc-{self.descriptor}"
+        elif self.retrieval != "cluster_ssim":
             tag += f"_{self.retrieval}"
             if self.descriptor != "sscd_disc_mixup":
                 tag += f"-{self.descriptor}"
@@ -103,7 +109,12 @@ class Config:
 
     @property
     def uses_clusters(self) -> bool:
-        return self.retrieval == "cluster_ssim"
+        """True when the receiver searches only the sent cluster, so a cluster ID is sent."""
+        return self.retrieval in ("cluster_ssim", "cluster_descriptor")
+
+    @property
+    def uses_descriptors(self) -> bool:
+        return self.retrieval != "cluster_ssim"
 
 
 def _coerce(name: str, value):
