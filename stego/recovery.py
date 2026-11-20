@@ -24,9 +24,13 @@ def read_image(path: Path) -> np.ndarray:
     return image
 
 
-def to_comparison_gray(image_bgr: np.ndarray, size: int) -> np.ndarray:
+def comparison_gray_u8(image_bgr: np.ndarray, size: int) -> np.ndarray:
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-    return cv2.resize(gray, (size, size), interpolation=cv2.INTER_AREA).astype(np.float64)
+    return cv2.resize(gray, (size, size), interpolation=cv2.INTER_AREA)
+
+
+def to_comparison_gray(image_bgr: np.ndarray, size: int) -> np.ndarray:
+    return comparison_gray_u8(image_bgr, size).astype(np.float64)
 
 
 def equation_2(x: np.ndarray, y: np.ndarray) -> float:
@@ -59,7 +63,10 @@ class Retrieved:
 
 
 class Retriever:
-    def __init__(self, index: ImageIndex, paths: dict[str, Path], mode: str, size: int, cache_size: int = 20000):
+    # Candidates are cached as uint8 (64 KB at 256 x 256) and converted on use, which gives the same
+    # float64 values as converting first. 150,000 of them use less memory than 20,000 float64 images,
+    # so a large dataset such as COCO (k = 1024) does not re-read its candidates for every attack.
+    def __init__(self, index: ImageIndex, paths: dict[str, Path], mode: str, size: int, cache_size: int = 150000):
         self.index = index
         self.paths = paths
         self.size = size
@@ -71,13 +78,13 @@ class Retriever:
         cached = self._cache.get(image_index)
         if cached is not None:
             self._cache.move_to_end(image_index)
-            return cached
+            return cached.astype(np.float64)
         image = read_image(self.paths[self.index.ids[image_index]])
-        gray = to_comparison_gray(image, self.size)
+        gray = comparison_gray_u8(image, self.size)
         self._cache[image_index] = gray
         if len(self._cache) > self.cache_size:
             self._cache.popitem(last=False)
-        return gray
+        return gray.astype(np.float64)
 
     def retrieve(self, received_bgr: np.ndarray, cluster: int) -> Retrieved:
         """Returns the highest-scoring image in the given cluster."""

@@ -234,3 +234,22 @@ def test_too_strict_threshold_is_explained(synthetic):
     paths.read_dirs = []
     with pytest.raises(RuntimeError, match="lower usable_threshold"):
         run_baseline(_config(retrieval="sscd", usable_threshold=1.0), paths, allow_dirty=True, log=lambda m: None)
+
+
+def test_ssim_candidate_cache_is_uint8_and_gives_identical_scores(synthetic):
+    from stego.recovery import Retriever, to_comparison_gray
+
+    root, _, ids, image_paths = synthetic
+    index = _index(root, ids)
+    big = Retriever(index, image_paths, "global", 256)
+    tiny = Retriever(index, image_paths, "global", 256, cache_size=1)
+    cluster = next(c for c, members in index.cluster_members.items() if members.size > 1)
+    member = int(index.cluster_members[cluster][0])
+    expected = to_comparison_gray(read_image(image_paths[ids[member]]), 256)
+    assert np.array_equal(big._candidate(member), expected)
+    assert np.array_equal(big._candidate(member), expected)  # second call comes from the cache
+    assert big._cache[member].dtype == np.uint8
+    query = cv2.GaussianBlur(read_image(image_paths[ids[member]]), (5, 5), 0)
+    for _ in range(2):
+        a, b = big.retrieve(query, cluster), tiny.retrieve(query, cluster)
+        assert (a.image_index, a.best_score, a.second_score) == (b.image_index, b.best_score, b.second_score)
